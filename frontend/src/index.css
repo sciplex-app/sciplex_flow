@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  --canvas-bg: #1a1a1e;
+  --canvas-grid: #2a2a30;
+  --sidebar-bg: #0f0f12;
+  --node-bg: #252530;
+  --node-header: #1e1e24;
+  --text-primary: #e5e5e5;
+  --text-secondary: #a0a0a8;
+  --accent-primary: #06E4A8;
+  --accent-secondary: #04c790;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+}
+
+/* React Flow customizations */
+.react-flow__background {
+  background-color: var(--canvas-bg) !important;
+}
+
+.react-flow__background-pattern {
+  fill: var(--canvas-grid) !important;
+}
+
+.react-flow__edge-path {
+  stroke: #06E4A8;
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent-primary);
+  stroke-width: 3;
+}
+
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4a4a52;
+  border: 2px solid #06E4A8;
+  transition: all 0.15s ease;
+}
+
+.react-flow__handle:hover {
+  background: #06E4A8;
+  transform: scale(1.2);
+}
+
+.react-flow__handle-left {
+  left: -6px;
+}
+
+.react-flow__handle-right {
+  right: -6px;
+}
+
+/* Minimap */
+.react-flow__minimap {
+  background: rgba(15, 15, 18, 0.9) !important;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Controls */
+.react-flow__controls {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.react-flow__controls-button {
+  background: rgba(30, 30, 36, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  fill: #a0a0a8 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(40, 40, 48, 0.95) !important;
+  fill: #e5e5e5 !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Tooltip styles */
+.tooltip {
+  position: absolute;
+  background: rgba(20, 20, 24, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  z-index: 1000;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Animation utilities */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Focus states */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: rgba(6, 228, 168, 0.3);
+}
+
+/* Select dropdown styling - dark theme */
+select {
+  background-color: #252526 !important;
+  color: #e5e5e5 !important;
+}
+
+select option {
+  background-color: #252526 !important;
+  color: #e5e5e5 !important;
+}
+
+/* Select dropdown when open (some browsers) */
+select:focus {
+  background-color: #252526 !important;
+  color: #e5e5e5 !important;
+}
+
+/* Hide React Flow selection rectangle - nodes already have their own selection border */
+.react-flow__nodesselection {
+  display: none !important;
+}
+
+.react-flow__nodesselection-rect {
+  display: none !important;
+}
+

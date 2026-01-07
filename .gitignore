@@ -1,0 +1,76 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+
+# Packaging / build
+.Python
+build/
+dist/
+sdist/
+wheels/
+.eggs/
+*.egg-info/
+*.egg
+MANIFEST
+pip-wheel-metadata/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Coverage reports
+coverage.xml
+*.cover
+*.py,cover
+cover/
+
+# Editors / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# OS artifacts
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Node / frontend
+frontend/node_modules/
+frontend/.vite/
+frontend/.turbo/
+frontend/.eslintcache
+npm-debug.log
+yarn-error.log
+.pnpm-debug.log
+
+# Local data / secrets
+llm.json
+

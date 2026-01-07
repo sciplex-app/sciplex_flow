@@ -1,0 +1,25 @@
+Third-Party Notices for sciplex-flow
+Updated: 2026-01-07
+
+Runtime (pyproject dependencies):
+- sciplex-core — MIT — https://pypi.org/project/sciplex-core/
+- fastapi — MIT — https://fastapi.tiangolo.com/
+- uvicorn — BSD-3-Clause — https://www.uvicorn.org/
+- websockets — BSD-3-Clause — https://websockets.readthedocs.io/
+- pydantic — Apache-2.0 — https://docs.pydantic.dev/
+- python-multipart — Apache-2.0 — https://github.com/andrew-d/python-multipart
+
+Development-only extras:
+- pytest — MIT — https://docs.pytest.org/
+- ruff — MIT — https://github.com/astral-sh/ruff
+
+Frontend bundle (packaged in `frontend/dist`):
+- React — MIT — https://react.dev/
+- Vite — MIT — https://vitejs.dev/
+- TypeScript — Apache-2.0 — https://www.typescriptlang.org/
+- Other npm transitive dependencies are included in the built artifacts; see the corresponding project LICENSE files in their distributions.
+
+Notes:
+- License texts are provided within each dependency’s distribution (e.g., site-packages/*/LICENSE* for Python packages, and LICENSE files in npm packages). Review those for full terms and attribution requirements.
+- sciplex-core ships default nodes and assets; see its THIRDPARTYLICENSES for details of its bundled content.
+

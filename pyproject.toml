@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sciplex-flow"
+version = "0.1.0"
+description = "Local web app for Sciplex visual programming - node-based data science workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Sciplex Team"}
+]
+keywords = ["data-science", "visual-programming", "workflow", "nodes", "web-app"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    # Core dependency
+    "sciplex-core>=0.1.0",
+    # Web framework
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "websockets>=12.0",
+    "pydantic[email]>=2.5.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.4",
+]
+
+[project.scripts]
+sciplex-flow = "sciplex_flow.cli.server:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/sciplex"
+Documentation = "https://sciplex.readthedocs.io"
+Repository = "https://github.com/yourusername/sciplex"
+
+[tool.setuptools]
+package-dir = {"sciplex_flow" = "."}
+packages = [
+    "sciplex_flow",
+    "sciplex_flow.cli",
+    "sciplex_flow.backend",
+    "sciplex_flow.backend.adapters",
+]
+
+[tool.setuptools.package-data]
+sciplex_flow = [
+    "frontend/dist/**/*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sciplex_flow", "core"]
+
