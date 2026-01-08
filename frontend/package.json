@@ -7,6 +7,7 @@
     "dev": "cross-env VITE_AUTH_ENABLED=false VITE_MULTI_USER=false vite",
     "build": "cross-env VITE_AUTH_ENABLED=false VITE_MULTI_USER=false tsc && cross-env VITE_AUTH_ENABLED=false VITE_MULTI_USER=false vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {

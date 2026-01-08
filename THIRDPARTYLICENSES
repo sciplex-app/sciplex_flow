@@ -1,5 +1,5 @@
 Third-Party Notices for sciplex-flow
-Updated: 2026-01-07
+Updated: 2026-01-08
 
 Runtime (pyproject dependencies):
 - sciplex-core — MIT — https://pypi.org/project/sciplex-core/
@@ -12,9 +12,16 @@ Runtime (pyproject dependencies):
 Development-only extras:
 - pytest — MIT — https://docs.pytest.org/
 - ruff — MIT — https://github.com/astral-sh/ruff
+- mypy — MIT — https://github.com/python/mypy
 
 Frontend bundle (packaged in `frontend/dist`):
-- React — MIT — https://react.dev/
+- React / React DOM — MIT — https://react.dev/
+- @xyflow/react — MIT — https://reactflow.dev/
+- react-router-dom — MIT — https://reactrouter.com/
+- zustand — MIT — https://github.com/pmndrs/zustand
+- plotly.js-dist-min — MIT — https://plotly.com/javascript/
+- react-plotly.js — MIT — https://github.com/plotly/react-plotly.js
+- lucide-react — ISC — https://lucide.dev/
 - Vite — MIT — https://vitejs.dev/
 - TypeScript — Apache-2.0 — https://www.typescriptlang.org/
 - Other npm transitive dependencies are included in the built artifacts; see the corresponding project LICENSE files in their distributions.

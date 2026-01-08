@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Sciplex Team"}
+    {name = "Sciplex Team", email = "info@sciplex.de"}
 ]
 keywords = ["data-science", "visual-programming", "workflow", "nodes", "web-app"]
 classifiers = [
@@ -40,15 +40,17 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.8.4",
+    "mypy>=1.13.0",
 ]
 
 [project.scripts]
 sciplex-flow = "sciplex_flow.cli.server:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/sciplex"
-Documentation = "https://sciplex.readthedocs.io"
-Repository = "https://github.com/yourusername/sciplex"
+Homepage = "https://sciplex.de/en/"
+Documentation = "https://sciplex.de/en/"
+Repository = "https://github.com/sciplex-app/sciplex_flow.git"
+
 
 [tool.setuptools]
 package-dir = {"sciplex_flow" = "."}
