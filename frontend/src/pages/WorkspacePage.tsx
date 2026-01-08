@@ -29,8 +29,6 @@ import SaveProjectDialog from '../components/SaveProjectDialog';
 import { buildExistingProjectNames } from '../utils/projectUtils';
 import { useFlowStore } from '../store/flowStore';
 import { authenticatedFetch } from '../hooks/useApi';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 
 type Tab = 'files' | 'libraries' | 'projects' | 'icons' | 'packages';
 
@@ -2152,8 +2150,8 @@ export default function WorkspacePage() {
       )}
       {readmeOpen && (
         <Modal title={readmeTitle} onClose={() => setReadmeOpen(false)} onSubmit={() => setReadmeOpen(false)} submitLabel="Close">
-          <div className="max-h-96 overflow-y-auto text-sm text-gray-200">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{readmeContent}</ReactMarkdown>
+          <div className="max-h-96 overflow-y-auto text-sm text-gray-200 whitespace-pre-wrap">
+            {readmeContent}
           </div>
         </Modal>
       )}
