@@ -5,7 +5,7 @@ import { useToast } from './useToast';
 import { useAuthStore } from '../store/authStore';
 import { config } from '../config';
 
-const API_BASE = '/api';
+import { API_BASE } from '../api/constants';
 
 // Helper to add auth headers to fetch requests
 function getAuthHeaders(): Record<string, string> {

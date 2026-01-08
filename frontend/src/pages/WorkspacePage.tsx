@@ -29,6 +29,8 @@ import SaveProjectDialog from '../components/SaveProjectDialog';
 import { buildExistingProjectNames } from '../utils/projectUtils';
 import { useFlowStore } from '../store/flowStore';
 import { authenticatedFetch } from '../hooks/useApi';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type Tab = 'files' | 'libraries' | 'projects' | 'icons' | 'packages';
 
@@ -57,6 +59,7 @@ interface WorkspaceLibrary {
   loaded: boolean;
   is_helper?: boolean;  // True for helper files like _helpers.py
   enabled?: boolean | null;  // null for helpers, true/false for regular libraries
+  is_readme?: boolean;
   size?: number;
   modified?: string;
 }
@@ -153,6 +156,15 @@ export default function WorkspacePage() {
   const [newLibraryFolder, setNewLibraryFolder] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [readmeOpen, setReadmeOpen] = useState(false);
+  const [readmeContent, setReadmeContent] = useState('');
+  const [readmeTitle, setReadmeTitle] = useState('');
+
+  const closeReadmeModal = () => {
+    setReadmeOpen(false);
+    setReadmeContent('');
+    setReadmeTitle('');
+  };
 
   // Fetch files
   const fetchFiles = useCallback(async () => {
@@ -844,14 +856,31 @@ export default function WorkspacePage() {
   };
 
   // Open library in editor
-  const handleOpenLibrary = async (libraryPath: string, libraryName: string) => {
+  const handleOpenLibrary = async (lib: WorkspaceLibrary) => {
+    if (lib.is_readme) {
+      try {
+        const response = await authenticatedFetch(`/api/workspace/libraries/${encodeURIComponent(lib.path)}/content`);
+        if (response.ok) {
+          const content = await response.json();
+          setReadmeContent(content.content);
+          setReadmeTitle(lib.filename);
+          setReadmeOpen(true);
+        } else {
+          setMessage({ type: 'error', text: 'Failed to load README' });
+        }
+      } catch {
+        setMessage({ type: 'error', text: 'Failed to load README' });
+      }
+      return;
+    }
+
     try {
-      const response = await authenticatedFetch(`/api/workspace/libraries/${encodeURIComponent(libraryPath)}/content`);
+      const response = await authenticatedFetch(`/api/workspace/libraries/${encodeURIComponent(lib.path)}/content`);
       if (response.ok) {
         const content: LibraryContent = await response.json();
         setEditorContent(content.content);
-        setEditorPath(libraryPath);
-        setEditorTitle(`${libraryName}.py`);
+        setEditorPath(lib.path);
+        setEditorTitle(`${lib.name}.py`);
         setEditorError(null);  // Clear any previous errors
         setEditorOpen(true);
       } else {
@@ -1014,7 +1043,7 @@ export default function WorkspacePage() {
         window.dispatchEvent(new CustomEvent('refresh-libraries'));
         // Open the new library in editor
         if (result.library?.path) {
-          handleOpenLibrary(result.library.path, result.library.name);
+          handleOpenLibrary(result.library);
         }
       } else {
         const error = await response.json();
@@ -1481,12 +1510,12 @@ export default function WorkspacePage() {
                       {isExpanded && (
                         <div className="ml-6 border-l border-white/10 pl-2">
                           {folder.libraries.map((lib) => (
-                            <LibraryRow
+                              <LibraryRow
                               key={lib.path}
                               lib={lib}
                               isSelected={selectedItem === lib.path}
                               onSelect={() => setSelectedItem(lib.path)}
-                              onOpen={() => handleOpenLibrary(lib.path, lib.name)}
+                              onOpen={() => handleOpenLibrary(lib)}
                               onDownload={() => handleDownloadLibrary(lib.path, lib.filename)}
                               onDelete={() => handleDeleteLibrary(lib.path)}
                               onDuplicate={() => handleDuplicateLibrary(lib.path)}
@@ -1496,6 +1525,7 @@ export default function WorkspacePage() {
                               formatSize={formatSize}
                               openMenuId={openMenuId}
                               setOpenMenuId={setOpenMenuId}
+                              isReadme={lib.is_readme}
                             />
                           ))}
                         </div>
@@ -1511,7 +1541,7 @@ export default function WorkspacePage() {
                     lib={lib}
                     isSelected={selectedItem === lib.path}
                     onSelect={() => setSelectedItem(lib.path)}
-                    onOpen={() => handleOpenLibrary(lib.path, lib.name)}
+                    onOpen={() => handleOpenLibrary(lib)}
                     onDownload={() => handleDownloadLibrary(lib.path, lib.filename)}
                     onDelete={() => handleDeleteLibrary(lib.path)}
                     onDuplicate={() => handleDuplicateLibrary(lib.path)}
@@ -1521,6 +1551,7 @@ export default function WorkspacePage() {
                     formatSize={formatSize}
                     openMenuId={openMenuId}
                     setOpenMenuId={setOpenMenuId}
+                    isReadme={lib.is_readme}
                   />
                 ))}
               </>
@@ -2119,6 +2150,13 @@ export default function WorkspacePage() {
           projectFolders={projectFolders}
         />
       )}
+      {readmeOpen && (
+        <Modal title={readmeTitle} onClose={() => setReadmeOpen(false)} onSubmit={() => setReadmeOpen(false)} submitLabel="Close">
+          <div className="max-h-96 overflow-y-auto text-sm text-gray-200">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{readmeContent}</ReactMarkdown>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -2138,11 +2176,11 @@ interface LibraryRowProps {
   formatSize: (bytes: number) => string;
   openMenuId: string | null;
   setOpenMenuId: (id: string | null) => void;
+  isReadme?: boolean;
 }
 
 function LibraryRow({ lib, isSelected, onSelect, onOpen, onDownload, onDelete, onDuplicate, onMove, onRename, onToggleEnabled, formatSize, openMenuId, setOpenMenuId }: LibraryRowProps) {
-  // Only show checkbox for non-helper libraries
-  const showCheckbox = !lib.is_helper && onToggleEnabled !== undefined;
+  const showCheckbox = !lib.is_helper && !lib.is_readme && onToggleEnabled !== undefined;
   const menuId = `lib-${lib.path}`;
   
   return (

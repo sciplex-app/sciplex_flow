@@ -36,6 +36,8 @@ from pydantic import BaseModel
 # Add project root to Python path for core imports
 # sciplex-flow/backend/main.py -> sciplex-flow/backend -> sciplex-flow -> repo root
 project_root = Path(__file__).parent.parent.parent
+repo_root = project_root.parent
+core_root = repo_root / "sciplex_core"
 sys.path.insert(0, str(project_root))
 
 # Workspace configuration
@@ -49,6 +51,7 @@ from sciplex_core.model.node_model import EXECUTED, FAILED
 from sciplex_core.model.socket_model import SocketModel
 from sciplex_core.utils.library_loader import LibraryLoader
 from sciplex_core.utils.functions import variables_registry
+from sciplex_core.utils.script_node import SCRIPT_DEFAULT_CODE
 from sciplex_flow.backend.adapters.websocket_emitter import WebSocketEventEmitter
 
 # Local mode: No authentication needed
@@ -152,7 +155,7 @@ def initialize_workspace():
     workspace_icons_dir = get_workspace_icons_dir()
     
     # Copy default libraries to workspace/libraries/default folder
-    source_dir = Path(project_root) / "sciplex_core" / "libraries" / "default"
+    source_dir = core_root / "libraries" / "default"
     default_dest_dir = workspace_libraries_dir / "default"
     default_dest_dir.mkdir(parents=True, exist_ok=True)
     
@@ -175,9 +178,19 @@ def initialize_workspace():
         
         if restored_count > 0:
             logger.info(f"Restored {restored_count} default library file(s)")
+    readme_src = Path(project_root) / "sciplex_core" / "libraries" / "README.md"
+    readme_dest = default_dest_dir / "README.md"
+    if readme_src.exists():
+        shutil.copy2(str(readme_src), str(readme_dest))
+        logger.info("Copied libraries/README.md into workspace default libraries")
+    readme_src = core_root / "libraries" / "README.md"
+    readme_dest = default_dest_dir / "README.md"
+    if readme_src.exists():
+        shutil.copy2(str(readme_src), str(readme_dest))
+        logger.info("Ensured libraries/README.md exists in workspace default libraries")
     
     # Copy default icons to workspace/icons folder
-    assets_icons_dir = project_root / "sciplex_core" / "assets" / "icons"
+    assets_icons_dir = core_root / "assets" / "icons"
     
     # List of default library icons (these should always be updated from assets)
     default_library_icons = {
@@ -2461,6 +2474,12 @@ async def delete_workspace_icon(icon_name: str, ):
     
     if not icon_path.exists():
         raise HTTPException(status_code=404, detail="Icon not found")
+
+
+@app.get("/api/script/default-code")
+async def get_script_default_code():
+    """Return the default template for script nodes."""
+    return {"code": SCRIPT_DEFAULT_CODE}
     
     try:
         icon_path.unlink()
@@ -3693,12 +3712,12 @@ async def download_project(project_path: str):
 
 
 def get_library_info(file_path: Path, folder: str = "") -> dict:
-    """Get library info for a single .py file (including helper files like _helpers.py)."""
+    """Get library info for a single file (including helper files and README)."""
     lib_name = file_path.stem
     is_helper = file_path.name.startswith("_")
     
     # Helper files don't have nodes, but regular libraries do
-    if is_helper:
+    if is_helper or file_path.suffix.lower() != ".py":
         lib_nodes = []
         loaded = False
     else:
@@ -3714,9 +3733,11 @@ def get_library_info(file_path: Path, folder: str = "") -> dict:
         # If file is not in libraries dir, use filename
         library_path = f"{folder}/{file_path.name}" if folder else file_path.name
     
-    # Get enabled state from config
-    library_config = load_library_config()
-    enabled = is_library_enabled(library_path, library_config) if not is_helper else None
+    # Get enabled state when this is a Python file
+    enabled = None
+    if file_path.suffix.lower() == ".py" and not is_helper:
+        library_config = load_library_config()
+        enabled = is_library_enabled(library_path, library_config)
     
     stat = file_path.stat()
     
@@ -3765,8 +3786,7 @@ async def list_workspace_libraries():
                 # Skip __pycache__ directories inside folders too
                 if file_path.is_dir() and file_path.name == "__pycache__":
                     continue
-                if file_path.is_file() and file_path.suffix == ".py":
-                    # Include all .py files, including _helpers.py
+                if file_path.is_file() and (file_path.suffix.lower() == ".py" or file_path.name.lower() == "readme.md"):
                     folder_libraries.append(get_library_info(file_path, item.name))
             
             folders.append({
@@ -3775,8 +3795,7 @@ async def list_workspace_libraries():
                 "libraries": folder_libraries,
                 "is_default": item.name == "default",
             })
-        elif item.is_file() and item.suffix == ".py":
-            # Root level library file (including helper files)
+        elif item.is_file() and (item.suffix.lower() == ".py" or item.name.lower() == "readme.md"):
             root_libraries.append(get_library_info(item, ""))
     
     return {
@@ -3896,7 +3915,7 @@ def resolve_library_path(library_path: str) -> Path:
         name = library_path
     
     # Ensure .py extension
-    if not name.endswith(".py"):
+    if not name.lower().endswith(".md") and not name.endswith(".py"):
         name = f"{name}.py"
     
     if folder:
@@ -4057,6 +4076,16 @@ async def delete_library(library_path: str, ):
     
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Library not found")
+
+    libs_dir = get_workspace_libraries_dir()
+    try:
+        rel_path = file_path.relative_to(libs_dir).as_posix()
+    except ValueError:
+        rel_path = library_path
+
+    library_config = load_library_config()
+    library_config[rel_path] = False
+    save_library_config(library_config)
     
     # Unregister all nodes from this library using library_model's built-in method
     library_model.remove_library(library_name)
