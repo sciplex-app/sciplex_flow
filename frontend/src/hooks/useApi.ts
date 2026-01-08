@@ -807,79 +807,6 @@ export function useApi() {
     }
   }, [toast]);
 
-  const generateNodeFromSocket = useCallback(async (
-    nodeId: string,
-    socketId: string,
-    prompt: string,
-    position?: { x: number; y: number }
-  ) => {
-    try {
-      const response = await authenticatedFetch(`${API_BASE}/socket/${nodeId}/${socketId}/generate-node`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt,
-          position: position,
-        }),
-      });
-      
-      const text = await response.text();
-      let json: any;
-      try {
-        json = text ? JSON.parse(text) : {};
-      } catch {
-        json = {};
-      }
-
-      if (!response.ok) {
-        const detail = json?.detail || text || 'Failed to generate node from socket';
-        throw new Error(detail);
-      }
-      
-      if (json?.success) {
-        // Sync from backend to get newly created nodes
-        setTimeout(() => {
-          syncFromBackend();
-        }, 100);
-        toast.success(json?.message || 'Node generated successfully');
-        return json;
-      }
-      throw new Error(json?.message || 'Failed to generate node from socket');
-    } catch (error: any) {
-      console.error('Error generating node from socket:', error);
-      toast.error(error?.message || 'Failed to generate node from socket');
-      throw error;
-    }
-  }, [toast, syncFromBackend]);
-
-  const improveScriptNodeWithLLM = useCallback(async (nodeId: string, prompt: string, currentCode: string) => {
-    try {
-      const response = await authenticatedFetch(`${API_BASE}/nodes/${nodeId}/llm-improve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-          current_code: currentCode,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to improve script node');
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        return result.improved_code;
-      }
-      throw new Error(result.message || 'Failed to improve script node');
-    } catch (error: any) {
-      console.error('Error improving script node with LLM:', error);
-      toast.error(error?.message || 'Failed to improve script node');
-      throw error;
-    }
-  }, [toast]);
-
   return {
     fetchLibraries,
     createNode,
@@ -906,8 +833,6 @@ export function useApi() {
     copySelection,
     pasteGraph,
     getSocketSchema,
-    generateNodeFromSocket,
-    improveScriptNodeWithLLM,
   };
 }
 

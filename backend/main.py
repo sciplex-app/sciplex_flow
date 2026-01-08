@@ -69,10 +69,8 @@ logger = logging.getLogger(__name__)
 # Global state
 base_dir = os.path.join(Path.home(), "Sciplex")  # Legacy, kept for compatibility
 ws_emitter = WebSocketEventEmitter()
-# Local mode: Single scene controller (no multi-user)
+# Local mode: Single scene controller
 local_scene_controller: Optional[SceneController] = None
-# Per-user scene controllers: user_id -> SceneController (for server mode, not used in local)
-user_scene_controllers: Dict[int, SceneController] = {}
 
 
 async def emit_execution_states(scene_controller: SceneController) -> None:
@@ -144,23 +142,22 @@ class LoadProjectRequest(BaseModel):
 # Startup / Shutdown
 # ============================================================================
 
-def initialize_user_workspace(user_id: str):
-    """Initialize a user's workspace with default libraries and icons.
+def initialize_workspace():
+    """Initialize the workspace with default libraries and icons.
     
-    This function ensures default libraries and icons are present in the user's workspace.
+    This function ensures default libraries and icons are present in the workspace.
     If any default files are missing (e.g., deleted by the user), they will be restored.
     """
-    user_id_str = str(user_id)
-    workspace_libraries_dir = get_workspace_libraries_dir(user_id_str)
-    workspace_icons_dir = get_workspace_icons_dir(user_id_str)
+    workspace_libraries_dir = get_workspace_libraries_dir()
+    workspace_icons_dir = get_workspace_icons_dir()
     
-    # Copy default libraries to user's workspace/libraries/default folder
-    source_dir = Path(project_root) / "core" / "libraries" / "default"
+    # Copy default libraries to workspace/libraries/default folder
+    source_dir = Path(project_root) / "sciplex_core" / "libraries" / "default"
     default_dest_dir = workspace_libraries_dir / "default"
     default_dest_dir.mkdir(parents=True, exist_ok=True)
     
     if source_dir.exists():
-        logger.info(f"Checking default libraries for user {user_id} in {default_dest_dir}")
+        logger.info(f"Checking default libraries in {default_dest_dir}")
         # Files to copy (exclude __init__.py, __pycache__, and tutorial.py)
         node_files = ["_helpers.py", "data.py", "math.py", "transform.py", "visuals.py", "machine_learning.py"]
         
@@ -173,14 +170,14 @@ def initialize_user_workspace(user_id: str):
                 # Always restore if file doesn't exist (user may have deleted it)
                 if not dest_path.exists():
                     shutil.copy2(str(source_path), str(dest_path))
-                    logger.info(f"Restored default library file {filename} for user {user_id}")
+                    logger.info(f"Restored default library file {filename}")
                     restored_count += 1
         
         if restored_count > 0:
-            logger.info(f"Restored {restored_count} default library file(s) for user {user_id}")
+            logger.info(f"Restored {restored_count} default library file(s)")
     
-    # Copy default icons to user's workspace/icons folder
-    assets_icons_dir = project_root / "core" / "assets" / "icons"
+    # Copy default icons to workspace/icons folder
+    assets_icons_dir = project_root / "sciplex_core" / "assets" / "icons"
     
     # List of default library icons (these should always be updated from assets)
     default_library_icons = {
@@ -196,7 +193,7 @@ def initialize_user_workspace(user_id: str):
     }
     
     if assets_icons_dir.exists():
-        logger.info(f"Checking default icons for user {user_id} in {workspace_icons_dir}")
+        logger.info(f"Checking default icons in {workspace_icons_dir}")
         icons_restored = 0
         icons_updated = 0
         for icon_file in assets_icons_dir.iterdir():
@@ -216,7 +213,7 @@ def initialize_user_workspace(user_id: str):
                     if not dest_icon.exists():
                         shutil.copy2(str(icon_file), str(dest_icon))
                         icons_restored += 1
-                        logger.debug(f"Restored default library icon {icon_file.name} for user {user_id}")
+                        logger.debug(f"Restored default library icon {icon_file.name}")
                     else:
                         # Update default library icons (force overwrite to ensure latest version)
                         shutil.copy2(str(icon_file), str(dest_icon))
@@ -228,27 +225,27 @@ def initialize_user_workspace(user_id: str):
                         icons_restored += 1
         
         if icons_restored > 0 or icons_updated > 0:
-            logger.info(f"Restored {icons_restored} missing icon(s) and updated {icons_updated} default library icon(s) for user {user_id}")
+            logger.info(f"Restored {icons_restored} missing icon(s) and updated {icons_updated} default library icon(s)")
     
-    # Load libraries from user's workspace
-    load_user_libraries(user_id_str)
+    # Load libraries from workspace
+    load_libraries()
 
 
-def load_user_libraries(user_id: str):
-    """Load all libraries from a user's workspace directory."""
-    workspace_libraries_dir = get_workspace_libraries_dir(user_id)
-    user_base_dir = str(get_workspace_root(user_id))
+def load_libraries():
+    """Load all libraries from the workspace directory."""
+    workspace_libraries_dir = get_workspace_libraries_dir()
+    workspace_base_dir = str(get_workspace_root())
     
-    # Create library loader with user's base directory
-    library_loader = LibraryLoader(user_base_dir)
+    # Create library loader with workspace base directory
+    library_loader = LibraryLoader(workspace_base_dir)
     
     # Ensure default libraries folder is in sys.path for _helpers imports
     default_dest_dir = workspace_libraries_dir / "default"
     if str(default_dest_dir) not in sys.path:
         sys.path.insert(0, str(default_dest_dir))
     
-    # Load library configuration for this user
-    library_config = load_library_config(user_id)
+    # Load library configuration
+    library_config = load_library_config()
     
     def load_libraries_from_dir(directory: Path, base_lib_dir: Path):
         """Recursively load all .py files from a directory."""
@@ -273,22 +270,22 @@ def load_user_libraries(user_id: str):
                     
                     # Check if library is enabled
                     if not is_library_enabled(library_path, library_config):
-                        logger.debug(f"Skipping disabled library for user {user_id}: {library_path}")
+                        logger.debug(f"Skipping disabled library: {library_path}")
                         continue
                     
                     result = library_loader.load_library_file(str(item))
                     if result.get("success"):
-                        logger.info(f"Loaded library for user {user_id}: {item.name}")
+                        logger.info(f"Loaded library: {item.name}")
                     else:
-                        logger.warning(f"Failed to load library {item.name} for user {user_id}: {result.get('message')}")
+                        logger.warning(f"Failed to load library {item.name}: {result.get('message')}")
                 except Exception as e:
-                    logger.error(f"Error loading library {item.name} for user {user_id}: {e}")
+                    logger.error(f"Error loading library {item.name}: {e}")
     
     if workspace_libraries_dir.exists():
-        logger.info(f"Loading libraries for user {user_id} from: {workspace_libraries_dir}")
+        logger.info(f"Loading libraries from: {workspace_libraries_dir}")
         load_libraries_from_dir(workspace_libraries_dir, workspace_libraries_dir)
     
-    # Register script node (only once globally, but we call it per user just in case)
+    # Register script node
     try:
         from sciplex_core.utils.script_node import register_script_node
         register_script_node()
@@ -300,63 +297,28 @@ def get_local_scene_controller() -> SceneController:
     """Get or create the local scene controller (single-user mode)."""
     global local_scene_controller
     if local_scene_controller is None:
-        # Initialize workspace for local user (None = single-user mode)
-        initialize_user_workspace(None)
+        # Initialize workspace with default libraries and icons
+        initialize_workspace()
         
         from sciplex_core.controller.clipboard_interface import MockClipboard
-        base_dir = str(get_workspace_root(None))
+        base_dir = str(get_workspace_root())
         # Initialize workspace directories
-        get_workspace_files_dir(None)
-        get_workspace_libraries_dir(None)
-        get_workspace_projects_dir(None)
-        get_workspace_icons_dir(None)
+        get_workspace_files_dir()
+        get_workspace_libraries_dir()
+        get_workspace_projects_dir()
+        get_workspace_icons_dir()
         
         local_scene_controller = SceneController(
             base_dir=base_dir,
             event_emitter=ws_emitter,
             clipboard=MockClipboard()
         )
-        # Load libraries for local user
-        load_user_libraries(None)
     return local_scene_controller
-
-
-def get_user_scene_controller(user_id: int) -> SceneController:
-    """Get or create a scene controller for a user.
-    
-    On every call (not just first creation), this ensures the user's workspace
-    is properly initialized with default libraries and icons. This means deleted
-    default files will be restored on subsequent logins/accesses.
-    
-    Note: In local mode, this is not used. Use get_local_scene_controller() instead.
-    """
-    # Always check and restore default libraries/icons on every access
-    # This ensures deleted default files are restored when user logs in again
-    initialize_user_workspace(str(user_id))
-    
-    if user_id not in user_scene_controllers:
-        # Create WebSocket emitter for this user (they all share the same emitter instance)
-        from sciplex_core.controller.clipboard_interface import MockClipboard
-        user_base_dir = str(get_workspace_root(str(user_id)))
-        # Initialize workspace directories for this user
-        get_workspace_files_dir(str(user_id))
-        get_workspace_libraries_dir(str(user_id))
-        get_workspace_projects_dir(str(user_id))
-        get_workspace_icons_dir(str(user_id))
-        
-        user_scene_controllers[user_id] = SceneController(
-            base_dir=user_base_dir,
-            event_emitter=ws_emitter,
-            clipboard=MockClipboard()
-        )
-    return user_scene_controllers[user_id]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global user_scene_controllers
-    
     # Startup
     logger.info("Starting Sciplex Local Web Backend...")
     
@@ -503,7 +465,7 @@ async def get_libraries() -> Dict[str, List[dict]]:
     scene_controller = get_local_scene_controller()
     
     # Note: We don't reload libraries here anymore. Libraries are loaded:
-    # - On startup (via get_local_scene_controller -> load_user_libraries)
+    # - On startup (via get_local_scene_controller -> load_libraries)
     # - When toggling enabled/disabled (via reload_custom_libraries)
     # - When manually reloading (via /api/workspace/libraries/reload)
     # Reloading here caused issues where disabled libraries could be re-added
@@ -1217,147 +1179,6 @@ async def update_script_node_code(node_id: str, request: UpdateScriptCodeRequest
             }
     
     raise HTTPException(status_code=404, detail="Node not found")
-
-
-class ImproveScriptNodeRequest(BaseModel):
-    prompt: str
-    current_code: str
-
-
-@app.post("/api/nodes/{node_id}/llm-improve")
-async def improve_script_node_with_llm(node_id: str, request: ImproveScriptNodeRequest, ):
-    """Improve a script node's code using LLM based on user feedback."""
-    import os
-    from sciplex_core_ext.utils.llm.gemini import generate_code_with_gemini_flash
-    from sciplex_core_ext.utils.llm.prompts import (
-        determine_intent_hint,
-        clarification_hint,
-        explanation_hint,
-        code_hint,
-    )
-    from sciplex_core_ext.utils.llm.prompts import script_node_hint
-    from sciplex_core.model.library_model import library_model
-    
-    scene_controller = get_local_scene_controller()
-    
-    if not scene_controller.model.graph:
-        raise HTTPException(status_code=404, detail="Graph not found")
-    
-    # Find the node
-    node_model = None
-    for node in scene_controller.model.graph.nodes:
-        if node.id == node_id:
-            node_model = node
-            break
-    
-    if not node_model:
-        raise HTTPException(status_code=404, detail="Node not found")
-    
-    if not node_model.is_script:
-        raise HTTPException(status_code=400, detail="Node is not a script node")
-    
-    # Check for API key
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing GEMINI_API_KEY environment variable. Set it and restart the server."
-        )
-    
-    try:
-        enhanced_prompt = script_node_hint(request.current_code, request.prompt)
-        
-        # Generate improved code
-        response_text = generate_code_with_gemini_flash(
-            request.prompt,
-            system_hint=enhanced_prompt,
-            api_key=api_key,
-            context=None  # Private mode for script improvement
-        )
-        
-        # Extract only the code: remove markdown code fences and any surrounding text
-        import re
-        import ast
-        
-        code = response_text.strip()
-        
-        # First, try to extract code from markdown fences
-        code_block_match = re.search(r'```(?:python)?\s*\n?(.*?)```', code, re.DOTALL)
-        if code_block_match:
-            code = code_block_match.group(1).strip()
-        else:
-            # If no code fences, try to find the function definition
-            # Look for "def " and extract from there
-            def_match = re.search(r'\bdef\s+\w+.*', code, re.DOTALL)
-            if def_match:
-                code = def_match.group(0).strip()
-        
-        # Remove any leading text before "def"
-        # Find the first occurrence of "def " and take everything from there
-        def_index = code.find('def ')
-        if def_index > 0:
-            code = code[def_index:]
-        
-        # Remove any trailing text after the function
-        # Try to parse and extract just the function
-        try:
-            # Try to parse the code
-            tree = ast.parse(code)
-            # If it parses, find the first function definition
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
-                    # Get the source lines for this function
-                    start_line = node.lineno - 1
-                    end_line = node.end_lineno if hasattr(node, 'end_lineno') else len(code.split('\n'))
-                    lines = code.split('\n')
-                    code = '\n'.join(lines[start_line:end_line])
-                    break
-        except (SyntaxError, AttributeError):
-            # If parsing fails, try a simpler approach
-            # Find the first "def" and take everything until we hit something that looks like the end
-            # or until we have balanced indentation
-            lines = code.split('\n')
-            def_start = -1
-            for i, line in enumerate(lines):
-                if line.strip().startswith('def '):
-                    def_start = i
-                    break
-            
-            if def_start >= 0:
-                # Take from def_start to the end, but try to find where function ends
-                # by looking for the next top-level definition or end of file
-                function_lines = []
-                base_indent = len(lines[def_start]) - len(lines[def_start].lstrip())
-                
-                for i in range(def_start, len(lines)):
-                    line = lines[i]
-                    if i == def_start:
-                        function_lines.append(line)
-                    elif line.strip() == '':
-                        function_lines.append(line)
-                    elif line.strip().startswith('def ') and i > def_start:
-                        # Another function definition - stop here
-                        break
-                    elif line.strip().startswith('class ') and i > def_start:
-                        # Class definition - stop here
-                        break
-                    else:
-                        function_lines.append(line)
-                
-                code = '\n'.join(function_lines)
-        
-        code = code.strip()
-        
-        return {
-            "success": True,
-            "improved_code": code
-        }
-    except Exception as e:
-        logger.error(f"Error improving script node with LLM: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to improve script node: {str(e)}"
-        )
 
 
 @app.post("/api/nodes/{node_id}/toggle-hide-presentation")
@@ -2475,77 +2296,66 @@ async def delete_annotation(annotation_id: str, ):
 # Workspace - Centralized Path Management
 # ============================================================================
 
-def get_workspace_root(user_id: Optional[str] = None) -> Path:
-    """Get the workspace root directory for a user.
+def get_workspace_root() -> Path:
+    """Get the workspace root directory.
     
-    For authenticated users: uses ~/Sciplex/workspaces/user_{user_id}/
-    For single-user (no auth): uses WORKSPACE_ROOT env var or ~/Sciplex/workspace/
-    
-    Args:
-        user_id: Optional user identifier. If None, uses default workspace.
+    For local mode: uses WORKSPACE_ROOT env var or ~/Sciplex/workspace/
     
     Returns:
         Path to the workspace root directory.
     """
-    if user_id:
-        # Multi-user mode: per-user directory
-        workspaces_root = Path.home() / "Sciplex" / "workspaces"
-        user_workspace = workspaces_root / f"user_{user_id}"
-        user_workspace.mkdir(parents=True, exist_ok=True)
-        return user_workspace
-    else:
-        # Single-user mode: shared workspace (for backward compatibility)
-        workspace_root = Path(WORKSPACE_ROOT)
-        workspace_root.mkdir(parents=True, exist_ok=True)
-        return workspace_root
+    # Local mode: single workspace directory
+    workspace_root = Path(WORKSPACE_ROOT)
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    return workspace_root
 
 
-def get_workspace_files_dir(user_id: Optional[str] = None) -> Path:
+def get_workspace_files_dir() -> Path:
     """Get or create the workspace files directory."""
-    files_dir = get_workspace_root(user_id) / "files"
+    files_dir = get_workspace_root() / "files"
     files_dir.mkdir(parents=True, exist_ok=True)
     return files_dir
 
 
-def get_workspace_libraries_dir(user_id: Optional[str] = None) -> Path:
+def get_workspace_libraries_dir() -> Path:
     """Get or create the workspace libraries directory.
     
     This is where user-uploaded .py library files are stored.
     """
-    libraries_dir = get_workspace_root(user_id) / "libraries"
+    libraries_dir = get_workspace_root() / "libraries"
     libraries_dir.mkdir(parents=True, exist_ok=True)
     return libraries_dir
 
 
-def get_workspace_projects_dir(user_id: Optional[str] = None) -> Path:
+def get_workspace_projects_dir() -> Path:
     """Get or create the workspace projects directory.
     
     This is where saved workflows are stored as JSON files.
     """
-    projects_dir = get_workspace_root(user_id) / "projects"
+    projects_dir = get_workspace_root() / "projects"
     projects_dir.mkdir(parents=True, exist_ok=True)
     return projects_dir
 
 
-def get_workspace_icons_dir(user_id: Optional[str] = None) -> Path:
+def get_workspace_icons_dir() -> Path:
     """Get or create the workspace icons directory."""
-    icons_dir = get_workspace_root(user_id) / "icons"
+    icons_dir = get_workspace_root() / "icons"
     icons_dir.mkdir(parents=True, exist_ok=True)
     return icons_dir
 
 
-def get_library_config_path(user_id: Optional[str] = None) -> Path:
+def get_library_config_path() -> Path:
     """Get the path to the library configuration file."""
-    return get_workspace_root(user_id) / "library_config.json"
+    return get_workspace_root() / "library_config.json"
 
 
-def load_library_config(user_id: Optional[str] = None) -> Dict[str, bool]:
+def load_library_config() -> Dict[str, bool]:
     """Load library enabled/disabled configuration from file.
     
     Returns a dictionary mapping library paths (relative to libraries dir) to enabled state.
     Default is True (enabled) for all libraries.
     """
-    config_path = get_library_config_path(user_id)
+    config_path = get_library_config_path()
     if not config_path.exists():
         return {}
     
@@ -2582,7 +2392,7 @@ async def list_workspace_icons():
     """List all icons in the workspace/icons folder.
     Excludes toolbar icons (those starting with 'action_') as they are UI-only icons.
     """
-    icons_dir = get_workspace_icons_dir(None)
+    icons_dir = get_workspace_icons_dir()
     
     icons = []
     if icons_dir.exists():
@@ -2605,7 +2415,7 @@ async def list_workspace_icons():
 @app.post("/api/workspace/icons/upload")
 async def upload_workspace_icons(files: List[UploadFile] = File(...), ):
     """Upload icon files to the workspace/icons folder."""
-    icons_dir = get_workspace_icons_dir(None)
+    icons_dir = get_workspace_icons_dir()
     
     uploaded = []
     errors = []
@@ -2640,7 +2450,7 @@ async def upload_workspace_icons(files: List[UploadFile] = File(...), ):
 @app.delete("/api/workspace/icons/{icon_name}")
 async def delete_workspace_icon(icon_name: str, ):
     """Delete an icon from the workspace/icons folder."""
-    icons_dir = get_workspace_icons_dir(None)
+    icons_dir = get_workspace_icons_dir()
     icon_path = icons_dir / icon_name
     
     # Security check: ensure icon is within icons directory
@@ -2664,7 +2474,7 @@ async def delete_workspace_icon(icon_name: str, ):
 @app.get("/api/workspace/files")
 async def list_workspace_files():
     """List all files in the user's workspace, organized by folders."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     
     if not files_dir.exists():
         return {"folders": [], "files": []}
@@ -2725,7 +2535,7 @@ async def list_workspace_files():
 @app.post("/api/workspace/files/upload")
 async def upload_workspace_files(files: List[UploadFile] = File(...), folder: str = Query("", description="Folder name to upload to (empty for root)")):
     """Upload files to the workspace, optionally to a specific folder."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     uploaded = []
     
     # Allowed data file extensions
@@ -2769,7 +2579,7 @@ class CreateFolderRequest(BaseModel):
 @app.get("/api/workspace/files/{filepath:path}/download")
 async def download_workspace_file(filepath: str, ):
     """Download a file from the workspace. Supports folder paths (e.g., folder/file.csv)."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     file_path = files_dir / filepath
     
     if not file_path.exists():
@@ -2807,7 +2617,7 @@ async def download_workspace_file(filepath: str, ):
 @app.post("/api/workspace/files/folders")
 async def create_files_folder(request: CreateFolderRequest, ):
     """Create a new folder in the workspace files directory."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     
     # Validate folder name
     folder_name = request.name.strip()
@@ -2831,7 +2641,7 @@ class MoveFileRequest(BaseModel):
 @app.post("/api/workspace/files/{filepath:path}/move")
 async def move_file(filepath: str, request: MoveFileRequest):
     """Move a file to a different folder. Supports folder paths (e.g., folder/file.csv)."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     source_path = files_dir / filepath
     
     if not source_path.exists():
@@ -2890,7 +2700,7 @@ class DuplicateRequest(BaseModel):
 @app.post("/api/workspace/files/{filepath:path}/rename")
 async def rename_file(filepath: str, request: RenameRequest):
     """Rename a file. Supports folder paths (e.g., folder/file.csv)."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     source_path = files_dir / filepath
     
     if not source_path.exists():
@@ -2932,7 +2742,7 @@ async def rename_file(filepath: str, request: RenameRequest):
 @app.post("/api/workspace/files/{filepath:path}/duplicate")
 async def duplicate_file(filepath: str, request: DuplicateRequest = DuplicateRequest()):
     """Duplicate a file. Supports folder paths (e.g., folder/file.csv)."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     source_path = files_dir / filepath
     
     if not source_path.exists():
@@ -2986,7 +2796,7 @@ async def duplicate_file(filepath: str, request: DuplicateRequest = DuplicateReq
 @app.delete("/api/workspace/files/{filepath:path}")
 async def delete_workspace_file(filepath: str, ):
     """Delete a file or folder from the workspace. Supports folder paths (e.g., folder/file.csv)."""
-    files_dir = get_workspace_files_dir(None)
+    files_dir = get_workspace_files_dir()
     target_path = files_dir / filepath
     
     if not target_path.exists():
@@ -3025,7 +2835,7 @@ loaded_custom_libraries: Dict[str, List[str]] = {}
 @app.get("/api/projects")
 async def list_projects():
     """List all saved projects, organized by folders."""
-    projects_dir = get_workspace_projects_dir(None)
+    projects_dir = get_workspace_projects_dir()
     
     if not projects_dir.exists():
         return {"folders": [], "projects": []}
@@ -3107,7 +2917,7 @@ async def list_projects():
 @app.post("/api/projects/folders")
 async def create_projects_folder(request: CreateFolderRequest, ):
     """Create a new folder in the workspace projects directory."""
-    projects_dir = get_workspace_projects_dir(None)
+    projects_dir = get_workspace_projects_dir()
     
     # Validate folder name
     folder_name = request.name.strip()
@@ -3154,7 +2964,7 @@ async def save_project(request: SaveProjectRequest, ):
         folder_parts = parts[:-1]
         project_name_only = parts[-1]
         
-        projects_dir = get_workspace_projects_dir(None)
+        projects_dir = get_workspace_projects_dir()
         # Create folder structure if needed
         if folder_parts:
             folder_path = projects_dir
@@ -3165,7 +2975,7 @@ async def save_project(request: SaveProjectRequest, ):
         else:
             save_path = projects_dir / f"{project_name_only}.json"
     else:
-        projects_dir = get_workspace_projects_dir(None)
+        projects_dir = get_workspace_projects_dir()
         save_path = projects_dir / f"{project_name}.json"
     
     # Check if file exists (unless overwrite is True)
@@ -3181,8 +2991,8 @@ async def save_project(request: SaveProjectRequest, ):
         # This ensures that when loading a project, all libraries that were enabled
         # at save time will be enabled again
         imported_libraries = []
-        libs_dir = get_workspace_libraries_dir(None)
-        library_config = load_library_config(None)
+        libs_dir = get_workspace_libraries_dir()
+        library_config = load_library_config()
         
         def collect_enabled_libraries(directory: Path, base_dir: Path = libs_dir):
             """Recursively collect all enabled library files."""
@@ -3280,7 +3090,7 @@ async def load_project(request: LoadProjectRequest, force: bool = Query(False, d
         project_name = request.project_name.replace(".json", "").strip()
         logger.info(f"Project name after sanitization: {project_name}")
         
-        projects_dir = get_workspace_projects_dir(None)
+        projects_dir = get_workspace_projects_dir()
         logger.info(f"Projects directory: {projects_dir}")
         # Handle folder paths (e.g., "folder/project" or just "project")
         if "/" in project_name or "\\" in project_name:
@@ -3318,8 +3128,8 @@ async def load_project(request: LoadProjectRequest, force: bool = Query(False, d
             import_errors = []
             
             # First, ensure all imported libraries are enabled in the config
-            library_config = load_library_config(None)
-            libs_dir = get_workspace_libraries_dir(None)
+            library_config = load_library_config()
+            libs_dir = get_workspace_libraries_dir()
             config_updated = False
             
             for lib_path in imported_libraries:
@@ -3374,11 +3184,11 @@ async def load_project(request: LoadProjectRequest, force: bool = Query(False, d
                 logger.info("LibraryLoader created successfully")
                 
                 logger.info("Getting workspace libraries directory...")
-                libs_dir = get_workspace_libraries_dir(None)
+                libs_dir = get_workspace_libraries_dir()
                 logger.info(f"Libraries directory: {libs_dir}")
                 
                 logger.info("Loading library config...")
-                library_config = load_library_config(None)
+                library_config = load_library_config()
                 logger.info(f"Library config loaded: {len(library_config)} entries")
                 
                 # Clear existing custom libraries from library_model
@@ -3645,7 +3455,7 @@ async def delete_project(project_path: str):
 @app.post("/api/projects/{project_path:path}/move")
 async def move_project(project_path: str, request: MoveFileRequest):
     """Move a project to a different folder."""
-    projects_dir = get_workspace_projects_dir(None)
+    projects_dir = get_workspace_projects_dir()
     
     # Parse project path
     project_name = project_path.replace(".json", "").strip()
@@ -3712,7 +3522,7 @@ async def move_project(project_path: str, request: MoveFileRequest):
 @app.post("/api/projects/{project_path:path}/duplicate")
 async def duplicate_project(project_path: str, request: DuplicateRequest = DuplicateRequest()):
     """Duplicate a project file."""
-    projects_dir = get_workspace_projects_dir(None)
+    projects_dir = get_workspace_projects_dir()
     
     # Parse project path
     project_name = project_path.replace(".json", "").strip()
@@ -3782,7 +3592,7 @@ async def duplicate_project(project_path: str, request: DuplicateRequest = Dupli
 @app.post("/api/projects/{project_path:path}/rename")
 async def rename_project(project_path: str, request: RenameRequest):
     """Rename a project file."""
-    projects_dir = get_workspace_projects_dir(None)
+    projects_dir = get_workspace_projects_dir()
     
     # Parse project path
     project_name = project_path.replace(".json", "").strip()
@@ -3931,7 +3741,7 @@ async def list_workspace_libraries():
     
     Returns a structure with folders and their library files.
     """
-    libs_dir = get_workspace_libraries_dir(None)
+    libs_dir = get_workspace_libraries_dir()
     
     if not libs_dir.exists():
         return {"folders": [], "libraries": []}
@@ -3978,7 +3788,7 @@ async def list_workspace_libraries():
 @app.post("/api/workspace/libraries/folders")
 async def create_library_folder(request: CreateFolderRequest, ):
     """Create a new library folder."""
-    libs_dir = get_workspace_libraries_dir(None)
+    libs_dir = get_workspace_libraries_dir()
     
     # Validate folder name
     folder_name = request.name.strip()
@@ -4004,7 +3814,7 @@ class CreateLibraryRequest(BaseModel):
 @app.post("/api/workspace/libraries/files")
 async def create_library_file(request: CreateLibraryRequest, ):
     """Create a new library file."""
-    libs_dir = get_workspace_libraries_dir(None)
+    libs_dir = get_workspace_libraries_dir()
     
     # Validate library name
     lib_name = request.name.strip()
@@ -4072,9 +3882,9 @@ def MyCustomNode(input_data, factor: int = 10):
     }
 
 
-def resolve_library_path(library_path: str, user_id: Optional[str] = None) -> Path:
+def resolve_library_path(library_path: str) -> Path:
     """Resolve a library path (folder/filename or just filename) to full path."""
-    libs_dir = get_workspace_libraries_dir(user_id)
+    libs_dir = get_workspace_libraries_dir()
     
     # Handle path like "default/machine_learning" or just "mylib"
     if "/" in library_path:
@@ -4100,7 +3910,7 @@ def resolve_library_path(library_path: str, user_id: Optional[str] = None) -> Pa
 @app.get("/api/workspace/libraries/{library_path:path}/content")
 async def get_library_content(library_path: str, ):
     """Get the content of a library file. Path can be 'folder/name' or just 'name'."""
-    file_path = resolve_library_path(library_path, None)
+    file_path = resolve_library_path(library_path)
     
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Library not found")
@@ -4123,7 +3933,7 @@ async def get_library_content(library_path: str, ):
 @app.get("/api/workspace/libraries/{library_path:path}/download")
 async def download_library(library_path: str, ):
     """Download a library file. Path can be 'folder/name' or just 'name'."""
-    file_path = resolve_library_path(library_path, None)
+    file_path = resolve_library_path(library_path)
     
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Library not found")
@@ -4142,7 +3952,7 @@ class UpdateLibraryContentRequest(BaseModel):
 @app.put("/api/workspace/libraries/{library_path:path}/content")
 async def update_library_content(library_path: str, request: UpdateLibraryContentRequest, ):
     """Update the content of a library file and reload it. Path can be 'folder/name' or just 'name'."""
-    file_path = resolve_library_path(library_path, None)
+    file_path = resolve_library_path(library_path)
     library_name = file_path.stem
     is_helper = file_path.name.startswith("_")
     
@@ -4203,7 +4013,7 @@ async def update_library_content(library_path: str, request: UpdateLibraryConten
 @app.post("/api/workspace/libraries/upload")
 async def upload_library_files(files: List[UploadFile] = File(...), folder: str = Query("", description="Folder name to upload to (empty for root)")):
     """Upload Python library files and load them, optionally to a specific folder."""
-    libs_dir = get_workspace_libraries_dir(None)
+    libs_dir = get_workspace_libraries_dir()
     uploaded = []
     
     # Determine target directory
@@ -4242,7 +4052,7 @@ async def upload_library_files(files: List[UploadFile] = File(...), folder: str 
 @app.delete("/api/workspace/libraries/{library_path:path}")
 async def delete_library(library_path: str, ):
     """Delete a library file. Path can be 'folder/name' or just 'name'."""
-    file_path = resolve_library_path(library_path, None)
+    file_path = resolve_library_path(library_path)
     library_name = file_path.stem
     
     if not file_path.exists():
@@ -4262,8 +4072,8 @@ async def delete_library(library_path: str, ):
 @app.post("/api/workspace/libraries/{library_path:path}/move")
 async def move_library(library_path: str, request: MoveFileRequest):
     """Move a library to a different folder."""
-    libs_dir = get_workspace_libraries_dir(None)
-    source_path = resolve_library_path(library_path, None)
+    libs_dir = get_workspace_libraries_dir()
+    source_path = resolve_library_path(library_path)
     
     if not source_path.exists():
         raise HTTPException(status_code=404, detail="Library not found")
@@ -4317,8 +4127,8 @@ async def move_library(library_path: str, request: MoveFileRequest):
 @app.post("/api/workspace/libraries/{library_path:path}/duplicate")
 async def duplicate_library(library_path: str, request: DuplicateRequest = DuplicateRequest()):
     """Duplicate a library file."""
-    libs_dir = get_workspace_libraries_dir(None)
-    source_path = resolve_library_path(library_path, None)
+    libs_dir = get_workspace_libraries_dir()
+    source_path = resolve_library_path(library_path)
     
     if not source_path.exists():
         raise HTTPException(status_code=404, detail="Library not found")
@@ -4375,8 +4185,8 @@ async def duplicate_library(library_path: str, request: DuplicateRequest = Dupli
 @app.post("/api/workspace/libraries/{library_path:path}/rename")
 async def rename_library(library_path: str, request: RenameRequest):
     """Rename a library file."""
-    libs_dir = get_workspace_libraries_dir(None)
-    source_path = resolve_library_path(library_path, None)
+    libs_dir = get_workspace_libraries_dir()
+    source_path = resolve_library_path(library_path)
     
     if not source_path.exists():
         raise HTTPException(status_code=404, detail="Library not found")
@@ -4441,7 +4251,7 @@ async def toggle_library_enabled(library_path: str, request: ToggleLibraryEnable
     When disabled, the library will not be loaded into the library model.
     Files starting with _ (helpers) cannot be toggled.
     """
-    libs_dir = get_workspace_libraries_dir(None)
+    libs_dir = get_workspace_libraries_dir()
     
     # Resolve the library file path
     file_path = libs_dir / library_path.replace("/", os.sep)
@@ -4549,7 +4359,7 @@ async def toggle_library_enabled(library_path: str, request: ToggleLibraryEnable
     }
 
 
-async def reload_custom_libraries(user_id: Optional[str] = None):
+async def reload_custom_libraries():
     """Reload all Python libraries from the workspace libraries directory.
     
     This reloads libraries from workspace/libraries/ including all subfolders.
@@ -4564,11 +4374,11 @@ async def reload_custom_libraries(user_id: Optional[str] = None):
     # Get all nodes before reload
     nodes_before = set(library_model.get_library_items().keys())
     
-    # Reload libraries from web app's libraries folder (including subfolders)
-    libs_dir = get_workspace_libraries_dir(user_id)
+    # Reload libraries from workspace's libraries folder (including subfolders)
+    libs_dir = get_workspace_libraries_dir()
     
     # Load library configuration
-    library_config = load_library_config(user_id)
+    library_config = load_library_config()
     
     def load_from_dir(directory: Path, base_dir: Path = libs_dir):
         """Load all .py files from a directory."""
@@ -4886,100 +4696,6 @@ async def paste_graph(request: PasteGraphRequest, ):
         raise HTTPException(status_code=500, detail=f"Failed to paste graph: {str(e)}")
 
 
-class LLMGenerateRequest(BaseModel):
-    prompt: str
-
-
-def _build_graph_context(scene_controller):
-    if not scene_controller:
-        return None
-
-    from sciplex_core_ext.utils.llm.prompts import LLMContext
-
-    try:
-        export_result = scene_controller.export_graph_as_python_code()
-        current_graph_code = export_result.data.get("code", "") if export_result.success else ""
-    except Exception:
-        current_graph_code = ""
-
-    if current_graph_code:
-        return LLMContext(current_graph_code=current_graph_code)
-
-    return None
-
-
-@app.post("/api/llm/generate")
-async def generate_with_llm(request: LLMGenerateRequest, ):
-    """Generate code or explanation using Gemini LLM."""
-    import os
-    from sciplex_core_ext.utils.llm.gemini import generate_code_with_gemini_flash
-    from sciplex_core_ext.utils.llm.prompts import (
-        LLMContext,
-        determine_intent_hint,
-        clarification_hint,
-        explanation_hint,
-        code_hint,
-    )
-    
-    # Check for API key
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing GEMINI_API_KEY environment variable. Set it and restart the server."
-        )
-    
-    scene_controller = get_local_scene_controller()
-    
-    try:
-        # Determine intent
-        intent_text = generate_code_with_gemini_flash(
-            "",
-            system_hint=determine_intent_hint(request.prompt),
-            api_key=api_key
-        ).strip().lower()
-
-        intent = "code"
-        response_text = ""
-
-        if "intent: clarify" in intent_text:
-            intent = "clarify"
-            response_text = generate_code_with_gemini_flash(
-                "",
-                system_hint=clarification_hint(request.prompt),
-                api_key=api_key
-            )
-        elif "intent: explanation" in intent_text:
-            intent = "explanation"
-            context = _build_graph_context(scene_controller)
-            response_text = generate_code_with_gemini_flash(
-                request.prompt,
-                system_hint=explanation_hint(request.prompt, context),
-                api_key=api_key,
-                context=context
-            )
-        else:
-            intent = "code"
-            response_text = generate_code_with_gemini_flash(
-                request.prompt,
-                system_hint=code_hint(request.prompt),
-                api_key=api_key
-            )
-
-        return {
-            "success": True,
-            "response": response_text,
-            "intent": intent,
-            "intent_raw": intent_text
-        }
-    except Exception as e:
-        logger.error(f"Error generating LLM response: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate LLM response: {str(e)}"
-        )
-
-
 @app.get("/api/workspace/variables")
 async def get_workspace_variables():
     """Get all variables from the variables registry."""
@@ -5105,220 +4821,6 @@ async def get_socket_schema(node_id: str, socket_id: str, ):
         raise HTTPException(status_code=500, detail=f"Failed to get socket schema: {str(e)}")
 
 
-class GenerateNodeFromSocketRequest(BaseModel):
-    prompt: str
-    position: Optional[NodePosition] = None
-
-
-@app.post("/api/socket/{node_id}/{socket_id}/generate-node")
-async def generate_node_from_socket(
-    node_id: str,
-    socket_id: str,
-    request: GenerateNodeFromSocketRequest,
-):
-    """Generate a new node from LLM based on socket data."""
-    import os
-    from sciplex_core.controller.node_controller import NodeController
-    
-    scene_controller = get_local_scene_controller()
-    
-    # Check for API key
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing GEMINI_API_KEY environment variable. Set it and restart the server."
-        )
-    
-    try:
-        # Find the node and socket
-        graph = scene_controller.model.graph
-        node_model = None
-        for node in graph.nodes:
-            if node.id == node_id:
-                node_model = node
-                break
-        
-        if not node_model:
-            raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
-        
-        # Find the socket (output socket only)
-        socket_model = None
-        for socket in node_model.output_sockets:
-            if socket.id == socket_id:
-                socket_model = socket
-                break
-        
-        if not socket_model:
-            raise HTTPException(status_code=404, detail=f"Socket {socket_id} not found")
-        
-        # Get data from socket
-        data = socket_model.get_data()
-        
-        # If no data, try to execute the node first
-        if data is None and node_model:
-            node_controller = NodeController(node_model)
-            node_controller.execute()
-            data = socket_model.get_data()
-        
-        if data is None:
-            raise HTTPException(
-                status_code=400,
-                detail="No data available. Please execute the source node first."
-            )
-        
-        # Extract schema
-        from sciplex_core.utils.data_schema import extract_schema_from_data
-        schema_info = extract_schema_from_data(data)
-        
-        # Build enhanced prompt with schema
-        enhanced_prompt = scene_controller._build_llm_prompt_from_data(
-            request.prompt,
-            schema_info,
-            data
-        )
-        
-        # Generate code using LLM
-        from sciplex_core_ext.utils.llm.gemini import generate_code_with_gemini_flash
-        import re
-        code = generate_code_with_gemini_flash(
-            request.prompt,
-            system_hint=enhanced_prompt,
-            api_key=api_key
-        )
-        
-        if not code:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to generate code from LLM."
-            )
-        
-        # Clean the code: remove markdown code blocks (similar to _strip_code_fences)
-        code = code.strip()
-        if code.startswith("```"):
-            # Remove opening ```python or ```
-            code = re.sub(r"^```[a-zA-Z0-9_+-]*\s*", "", code, flags=re.MULTILINE)
-            # Remove closing ```
-            code = re.sub(r"\s*```$", "", code, flags=re.MULTILINE)
-        code = code.strip()
-        
-        # Try to extract just the function definition using AST
-        try:
-            import ast
-            tree = ast.parse(code)
-            # Find the first function definition
-            for node in tree.body:
-                if isinstance(node, ast.FunctionDef):
-                    # Extract just this function
-                    lines = code.splitlines(True)
-                    if hasattr(node, 'lineno') and hasattr(node, 'end_lineno'):
-                        func_code = "".join(lines[node.lineno - 1:node.end_lineno])
-                        code = func_code
-                        break
-        except SyntaxError:
-            # If AST parsing fails, try simple line-based extraction
-            lines = code.split("\n")
-            cleaned_lines = []
-            in_code_block = False
-            
-            for line in lines:
-                stripped = line.strip()
-                # Start collecting when we see "def "
-                if stripped.startswith("def "):
-                    in_code_block = True
-                # Stop if we see markdown closing or explanation text after code
-                if in_code_block and (stripped.startswith("```") or 
-                    (stripped and not stripped.startswith("#") and 
-                     any(x in stripped.lower() for x in ["here's", "here is", "note:", "this code"]))):
-                    break
-                if in_code_block or stripped.startswith("def "):
-                    cleaned_lines.append(line)
-            
-            if cleaned_lines:
-                code = "\n".join(cleaned_lines).strip()
-        
-        if not code:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to extract valid code from LLM response."
-            )
-        
-        # Log the cleaned code for debugging
-        logger.info(f"Cleaned LLM code:\n{code}")
-        
-        # Determine position for new node
-        position = request.position
-        if not position:
-            # Default position: offset to the right of the source node
-            position = NodePosition(
-                x=node_model.pos_x + 200,
-                y=node_model.pos_y
-            )
-        
-        # Validate code syntax before trying to build graph
-        import ast
-        try:
-            ast.parse(code)
-        except SyntaxError as e:
-            logger.error(f"Syntax error in generated code: {e}")
-            logger.error(f"Generated code:\n{code}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Invalid syntax in generated code: {e}. Please try again with a different prompt."
-            )
-        
-        # Create node from code
-        result = scene_controller.build_graph_from_python_code(
-            code,
-            (position.x, position.y)
-        )
-        
-        if not result.success:
-            logger.error(f"Failed to build graph from code: {result.message}")
-            logger.error(f"Generated code:\n{code}")
-            raise HTTPException(
-                status_code=500,
-                detail=result.message or "Failed to create node from generated code"
-            )
-        
-        # Connect edge from source socket to the first newly created node
-        if graph and graph.nodes:
-            # Get the last node (should be the one we just created)
-            created_node = graph.nodes[-1]
-            
-            if created_node.input_sockets:
-                target_socket = created_node.input_sockets[0]
-                
-                # Validate and create edge
-                edge_result = scene_controller.validate_and_create_edge(
-                    socket_model,
-                    target_socket
-                )
-                
-                if edge_result.success and edge_result.data:
-                    edge_model = edge_result.data
-                    scene_controller.add_edge_model(edge_model)
-                    
-                    # Emit graph state update
-                    ws_emitter.emit("graph_state", {
-                        "nodes": [transform_node_for_frontend(created_node)],
-                        "edges": [edge_model.serialize()]
-                    })
-        
-        return {
-            "success": True,
-            "message": "Node generated and connected successfully"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error generating node from socket: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate node from socket: {str(e)}"
-        )
-
-
 # ============================================================================
 # Health Check
 # ============================================================================
@@ -5328,8 +4830,7 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "libraries_loaded": len(library_model.get_library_items()),
-        "active_users": len(user_scene_controllers)
+        "libraries_loaded": len(library_model.get_library_items())
     }
 
 

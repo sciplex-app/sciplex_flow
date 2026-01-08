@@ -71,6 +71,3 @@ npm-debug.log
 yarn-error.log
 .pnpm-debug.log
 
-# Local data / secrets
-llm.json
-
