@@ -86,6 +86,19 @@ ws_emitter = WebSocketEventEmitter()
 # Local mode: Single scene controller
 local_scene_controller: Optional[SceneController] = None
 
+# Default library icons that should always be present in the workspace
+DEFAULT_LIBRARY_ICONS = {
+    "boolean", "folder", "dataset", "list", "csv", "data_table", "number",
+    "data_array", "function", "save", "input", "barchart", "boxplot",
+    "histogram", "Line", "scatter", "poly", "plot2", "subplot", "grid",
+    "arithm", "corr", "cumsum", "diff", "logical", "MaxMin", "not", "rel",
+    "map1d", "map2d", "roll", "TableFormula", "score", "table",
+    "decisiontree", "encoder", "transform", "linreg", "predict",
+    "randomforest", "split", "xgboost", "cut", "add_row", "info", "bin",
+    "filter", "group", "nans", "pivot", "change", "select", "shift",
+    "sort", "switch", "square",
+}
+
 
 async def emit_execution_states(scene_controller: SceneController) -> None:
     if not scene_controller.model.graph:
@@ -198,28 +211,9 @@ def initialize_workspace():
         logger.warning(f"Could not verify/copy default libraries: {e}")
 
     # Copy default icons to workspace/icons folder
-    # Use importlib.resources to access packaged assets even when sciplex_core is installed as a wheel
-    try:
-        with pkg_resources.as_file(pkg_resources.files("sciplex_core") / "assets" / "icons") as assets_icons_dir:
-            assets_icons_path = assets_icons_dir
-    except Exception:
-        # Fallback to a local path (developer editable checkout)
-        assets_icons_path = project_root / "sciplex_core" / "assets" / "icons"
+    assets_icons_path = get_assets_icons_path()
 
-    # List of default library icons (these should always be updated from assets)
-    default_library_icons = {
-        "boolean", "folder", "dataset", "list", "csv", "data_table", "number",
-        "data_array", "function", "save", "input", "barchart", "boxplot",
-        "histogram", "Line", "scatter", "poly", "plot2", "subplot", "grid",
-        "arithm", "corr", "cumsum", "diff", "logical", "MaxMin", "not", "rel",
-        "map1d", "map2d", "roll", "TableFormula", "score", "table",
-        "decisiontree", "encoder", "transform", "linreg", "predict",
-        "randomforest", "split", "xgboost", "cut", "add_row", "info", "bin",
-        "filter", "group", "nans", "pivot", "change", "select", "shift",
-        "sort", "switch", "square",
-    }
-
-    if assets_icons_path.exists():
+    if assets_icons_path and assets_icons_path.exists():
         logger.info(f"Checking default icons in {workspace_icons_dir}")
         icons_restored = 0
         icons_updated = 0
@@ -235,7 +229,7 @@ def initialize_workspace():
 
                 # For default library icons, always restore if missing (user may have deleted them)
                 # Also update them if they exist (they're now black icons)
-                if icon_name in default_library_icons:
+                if icon_name in DEFAULT_LIBRARY_ICONS:
                     # Check if icon is missing or needs update
                     if not dest_icon.exists():
                         shutil.copy2(str(icon_file), str(dest_icon))
@@ -591,20 +585,27 @@ async def get_icon(icon_name: str, variant: Optional[str] = Query(None, descript
     # Get workspace icons directory
     workspace_icons_dir = get_workspace_icons_dir()
 
-    # Search locations (prioritize workspace icons over default assets)
-    search_paths = [
-        workspace_icons_dir,  # User-defined icons in workspace/icons
-        project_root / "sciplex_core" / "assets" / "icons",  # Default icons (fallback)
-    ]
+    # Only serve icons that exist in the workspace/icons directory for library/node icons.
+    # If the user deleted an icon during a session, it will be missing until restart (initialize_workspace re-seeds defaults).
+    for variant_file in icon_variants:
+        icon_path = workspace_icons_dir / variant_file
+        if icon_path.exists():
+            return FileResponse(
+                path=str(icon_path),
+                media_type="image/png" if variant_file.endswith(".png") else "image/svg+xml"
+            )
 
-    for search_path in search_paths:
-        for variant_file in icon_variants:
-            icon_path = search_path / variant_file
-            if icon_path.exists():
-                return FileResponse(
-                    path=str(icon_path),
-                    media_type="image/png" if variant_file.endswith(".png") else "image/svg+xml"
-                )
+    # Fallback for UI/toolbar icons (action_*) that are not user-editable: serve from packaged assets
+    if icon_base.startswith("action_"):
+        assets_icons_path = get_assets_icons_path()
+        if assets_icons_path:
+            for variant_file in icon_variants:
+                icon_path = assets_icons_path / variant_file
+                if icon_path.exists():
+                    return FileResponse(
+                        path=str(icon_path),
+                        media_type="image/png" if variant_file.endswith(".png") else "image/svg+xml"
+                    )
 
     # Return 404 if icon not found
     raise HTTPException(status_code=404, detail=f"Icon '{icon_name}' not found")
@@ -2369,6 +2370,18 @@ def get_workspace_icons_dir() -> Path:
     icons_dir = get_workspace_root() / "icons"
     icons_dir.mkdir(parents=True, exist_ok=True)
     return icons_dir
+
+
+def get_assets_icons_path() -> Optional[Path]:
+    """Return the path to packaged icons, handling both installed and editable modes."""
+    try:
+        with pkg_resources.as_file(pkg_resources.files("sciplex_core") / "assets" / "icons") as assets_icons_dir:
+            return assets_icons_dir
+    except Exception:
+        fallback = project_root / "sciplex_core" / "assets" / "icons"
+        if fallback.exists():
+            return fallback
+    return None
 
 
 def get_library_config_path() -> Path:
