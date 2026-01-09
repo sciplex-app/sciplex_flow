@@ -54,7 +54,7 @@ jobs:
       - name: Ruff check
         run: ruff check .
       - name: Mypy (Python type check)
-        run: mypy sciplex_flow
+        run: python -m mypy . --config-file mypy.ini
       - name: Pytest
         run: pytest
       - name: Build wheel and sdist

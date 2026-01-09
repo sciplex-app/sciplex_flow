@@ -8,7 +8,7 @@ allowing real-time updates to be pushed to connected web clients.
 import asyncio
 import json
 import logging
-from typing import Callable, Dict, List, Set
+from typing import Callable, Dict, List, Optional, Set
 
 from fastapi import WebSocket
 from sciplex_core.controller.events import EventEmitter
@@ -134,7 +134,7 @@ class WebSocketEventEmitter(EventEmitter):
                 ]
         return result
 
-    def disconnect(self, event_name: str, callback: Callable = None) -> None:
+    def disconnect(self, event_name: str, callback: Optional[Callable] = None) -> None:
         """Disconnect a callback from an event."""
         if event_name not in self._listeners:
             return

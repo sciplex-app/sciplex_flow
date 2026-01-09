@@ -467,7 +467,7 @@ async def handle_ws_message(websocket: WebSocket, message: dict):
         # Note: WebSocket doesn't have user context yet, so we can't send graph state
         # The frontend should use the REST API /api/graph endpoint instead
         # For now, send empty graph state
-        graph_data = {
+        graph_data: Dict[str, list] = {
             "nodes": [],
             "edges": [],
             "annotations": [],
@@ -2446,22 +2446,26 @@ async def upload_workspace_icons(files: List[UploadFile] = File(...), ):
     errors = []
 
     for file in files:
+        filename = file.filename or ""
+        if not filename:
+            errors.append("Missing filename")
+            continue
         # Validate file extension
-        if not file.filename.lower().endswith(('.png', '.svg', '.jpg', '.jpeg')):
-            errors.append(f"{file.filename}: Invalid file type. Only .png, .svg, .jpg, .jpeg are allowed.")
+        if not filename.lower().endswith(('.png', '.svg', '.jpg', '.jpeg')):
+            errors.append(f"{filename}: Invalid file type. Only .png, .svg, .jpg, .jpeg are allowed.")
             continue
 
         try:
             # Save file
-            file_path = icons_dir / file.filename
+            file_path = icons_dir / filename
             with open(file_path, "wb") as f:
                 content = await file.read()
                 f.write(content)
-            uploaded.append(file.filename)
-            logger.info(f"Uploaded icon: {file.filename}")
+            uploaded.append(filename)
+            logger.info(f"Uploaded icon: {filename}")
         except Exception as e:
-            errors.append(f"{file.filename}: {str(e)}")
-            logger.error(f"Error uploading icon {file.filename}: {e}")
+            errors.append(f"{filename}: {str(e)}")
+            logger.error(f"Error uploading icon {filename}: {e}")
 
     if uploaded:
         message = f"Uploaded {len(uploaded)} icon(s): {', '.join(uploaded)}"
@@ -2486,6 +2490,14 @@ async def delete_workspace_icon(icon_name: str, ):
 
     if not icon_path.exists():
         raise HTTPException(status_code=404, detail="Icon not found")
+
+    try:
+        icon_path.unlink()
+        logger.info(f"Deleted icon: {icon_name}")
+        return {"success": True, "message": f"Icon '{icon_name}' deleted"}
+    except Exception as e:
+        logger.error(f"Error deleting icon {icon_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete icon: {str(e)}")
 
 
 @app.get("/api/script/default-code")
@@ -2572,8 +2584,11 @@ async def upload_workspace_files(files: List[UploadFile] = File(...), folder: st
         target_dir = files_dir
 
     for file in files:
+        filename = file.filename or ""
+        if not filename:
+            raise HTTPException(status_code=400, detail="Missing filename")
         # Validate extension
-        ext = Path(file.filename).suffix.lower()
+        ext = Path(filename).suffix.lower()
         if ext not in allowed_extensions:
             raise HTTPException(
                 status_code=400,
@@ -2581,13 +2596,13 @@ async def upload_workspace_files(files: List[UploadFile] = File(...), folder: st
             )
 
         # Save file
-        file_path = target_dir / file.filename
+        file_path = target_dir / filename
 
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
 
-        uploaded.append(file.filename)
+        uploaded.append(filename)
 
     return {
         "message": f"Uploaded {len(uploaded)} file(s)",
@@ -3984,7 +3999,7 @@ async def update_library_content(library_path: str, request: UpdateLibraryConten
             # Helper files don't have nodes, but other libraries might import from them
             # Reload all libraries to pick up changes in the helper
             logger.info(f"Helper file {library_name} updated, reloading all libraries...")
-            await reload_custom_libraries(None)
+            await reload_custom_libraries()
 
             return {
                 "success": True,
@@ -4040,24 +4055,27 @@ async def upload_library_files(files: List[UploadFile] = File(...), folder: str 
         target_dir = libs_dir
 
     for file in files:
+        filename = file.filename or ""
+        if not filename:
+            raise HTTPException(status_code=400, detail="Missing filename")
         # Validate extension
-        if not file.filename.endswith(".py"):
+        if not filename.endswith(".py"):
             raise HTTPException(
                 status_code=400,
                 detail="Only Python files (.py) are allowed"
             )
 
         # Save file
-        file_path = target_dir / file.filename
+        file_path = target_dir / filename
 
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
 
-        uploaded.append(file.filename)
+        uploaded.append(filename)
 
     # Reload libraries
-    await reload_custom_libraries(None)
+    await reload_custom_libraries()
 
     return {
         "message": f"Uploaded {len(uploaded)} library file(s)",
@@ -4138,7 +4156,7 @@ async def move_library(library_path: str, request: MoveFileRequest):
     shutil.move(str(source_path), str(target_path))
 
     # Reload libraries after move
-    await reload_custom_libraries(None)
+    await reload_custom_libraries()
 
     new_relative_path = str(target_path.relative_to(libs_dir)).replace("\\", "/")
     logger.info(f"Moved library from {library_path} to {new_relative_path}")
@@ -4196,7 +4214,7 @@ async def duplicate_library(library_path: str, request: DuplicateRequest = Dupli
     shutil.copy2(str(source_path), str(target_path))
 
     # Reload libraries after duplication
-    await reload_custom_libraries(None)
+    await reload_custom_libraries()
 
     new_relative_path = str(target_path.relative_to(libs_dir)).replace("\\", "/")
     logger.info(f"Duplicated library from {library_path} to {new_relative_path}")
@@ -4247,7 +4265,7 @@ async def rename_library(library_path: str, request: RenameRequest):
 
     # Unregister old library and reload
     library_model.remove_library(old_library_name)
-    await reload_custom_libraries(None)
+    await reload_custom_libraries()
 
     new_relative_path = str(target_path.relative_to(libs_dir)).replace("\\", "/")
     logger.info(f"Renamed library from {library_path} to {new_relative_path}")
@@ -4262,7 +4280,7 @@ async def rename_library(library_path: str, request: RenameRequest):
 @app.post("/api/workspace/libraries/reload")
 async def reload_libraries():
     """Reload all custom libraries."""
-    await reload_custom_libraries(None)
+    await reload_custom_libraries()
     return {"success": True, "message": "Libraries reloaded"}
 
 
@@ -4376,7 +4394,7 @@ async def toggle_library_enabled(library_path: str, request: ToggleLibraryEnable
             )
 
     # Trigger library reload event
-    await reload_custom_libraries(None)
+    await reload_custom_libraries()
 
     return {
         "success": True,
@@ -5026,7 +5044,7 @@ async def install_package(request: InstallPackageRequest, ):
 async def search_packages(q: str = Query(..., description="Search query")):
     """Search for packages on PyPI."""
     try:
-        import requests
+        import requests  # type: ignore[import-untyped]
     except ImportError:
         raise HTTPException(
             status_code=500,
