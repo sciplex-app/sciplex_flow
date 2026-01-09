@@ -10,6 +10,7 @@ import socket
 import webbrowser
 
 import uvicorn
+
 from sciplex_flow.backend.main import app
 
 
@@ -38,7 +39,7 @@ def find_available_port(start_port: int, max_attempts: int = 100) -> int:
         except OSError:
             # Port is in use, try next one
             continue
-    
+
     raise OSError(f"Could not find an available port after {max_attempts} attempts starting from {start_port}")
 
 
@@ -60,9 +61,9 @@ Examples:
         default=8888,
         help='Port to run the server on (default: 8888). If port is in use, will try next available port.'
     )
-    
+
     args = parser.parse_args()
-    
+
     # Find available port
     requested_port = args.port
     try:
@@ -70,14 +71,14 @@ Examples:
     except OSError as e:
         print(f"Error: {e}")
         return 1
-    
+
     host = "127.0.0.1"
-    
+
     # Inform user if port was changed
     port_message = f"Port {actual_port}"
     if actual_port != requested_port:
         port_message += f" (requested {requested_port} was in use)"
-    
+
     print("=" * 60)
     print("Starting Sciplex Flow Local Server")
     print("=" * 60)
@@ -85,17 +86,17 @@ Examples:
     print(f"Using {port_message}")
     print("Press Ctrl+C to stop the server")
     print("=" * 60)
-    
+
     # Open browser after a short delay
     def open_browser():
         import time
         time.sleep(1.5)
         webbrowser.open(f"http://{host}:{actual_port}")
-    
+
     import threading
     browser_thread = threading.Thread(target=open_browser, daemon=True)
     browser_thread.start()
-    
+
     try:
         uvicorn.run(
             app,

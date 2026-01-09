@@ -11,7 +11,6 @@ import logging
 from typing import Callable, Dict, List, Set
 
 from fastapi import WebSocket
-
 from sciplex_core.controller.events import EventEmitter
 
 logger = logging.getLogger(__name__)
@@ -65,24 +64,24 @@ class WebSocketEventEmitter(EventEmitter):
         if self._connections:
             # Serialize event data
             event_data = self._serialize_event(event_name, args, kwargs)
-            
+
             # Return the coroutine so it can be awaited
             return self._broadcast(event_data)
-        
+
         # No connections - return None
         return None
 
     async def _broadcast(self, message: str) -> None:
         """Broadcast a message to all connected WebSocket clients."""
         disconnected = set()
-        
+
         for connection in self._connections:
             try:
                 await connection.send_text(message)
             except Exception as e:
                 logger.warning(f"Failed to send to WebSocket: {e}")
                 disconnected.add(connection)
-        
+
         # Remove disconnected clients
         for conn in disconnected:
             self._connections.discard(conn)
@@ -110,14 +109,14 @@ class WebSocketEventEmitter(EventEmitter):
             "data": serialized_args[0] if len(serialized_args) == 1 else serialized_args,
             "kwargs": kwargs
         }
-        
+
         return json.dumps(event_payload, default=str)
 
     def _obj_to_dict(self, obj) -> dict:
         """Convert an object to a dictionary, handling nested objects."""
         if hasattr(obj, "serialize"):
             return obj.serialize()
-        
+
         result = {}
         for key, value in vars(obj).items():
             if key.startswith("_"):

@@ -179,7 +179,7 @@ function FlowCanvasInner() {
     setContextMenu(null); // Close context menu
     setPaneContextMenu(null); // Close pane context menu
   }, [setSelectedNode, setSelectedAnnotation, setPropertiesPanelOpen]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const onPaneClick: any = _onPaneClick;
 
   // Handle pane context menu (right-click on empty space)

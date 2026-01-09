@@ -80,7 +80,7 @@ function DisplayNode(props: any): JSX.Element {
   
   // Track if plot should be interactive (prevents interference with dragging)
   // Note: These are used in the Plot component (lines 918-949) but TypeScript doesn't detect all usages
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [isPlotInteractive, setIsPlotInteractive] = useState(false);
   const plotInteractionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -825,7 +825,7 @@ function DisplayNode(props: any): JSX.Element {
 }
 
 // Separate component for plot rendering to isolate errors (currently unused - may be used in future)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 function _PlotRenderer({ 
   figure, 
   plotType, 

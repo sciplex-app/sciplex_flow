@@ -5,7 +5,7 @@ import { useApi } from '../hooks/useApi';
 import { LibraryNodeInfo } from '../types';
 
 // Icon size matching desktop (50px icon + padding) - currently unused, kept for reference
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 const ICON_SIZE = 50;
 
 interface NodeTileProps {
