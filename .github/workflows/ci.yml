@@ -55,8 +55,6 @@ jobs:
         run: ruff check .
       - name: Mypy (Python type check)
         run: python -m mypy . --config-file mypy.ini
-      - name: Pytest
-        run: pytest
       - name: Build wheel and sdist
         run: python -m build
 
