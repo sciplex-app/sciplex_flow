@@ -198,10 +198,12 @@ def initialize_workspace():
         logger.warning(f"Could not verify/copy default libraries: {e}")
 
     # Copy default icons to workspace/icons folder
+    # Use importlib.resources to access packaged assets even when sciplex_core is installed as a wheel
     try:
-        with pkg_resources.as_file(pkg_resources.files("sciplex_core.assets.icons")) as assets_icons_dir:
+        with pkg_resources.as_file(pkg_resources.files("sciplex_core") / "assets" / "icons") as assets_icons_dir:
             assets_icons_path = assets_icons_dir
     except Exception:
+        # Fallback to a local path (developer editable checkout)
         assets_icons_path = project_root / "sciplex_core" / "assets" / "icons"
 
     # List of default library icons (these should always be updated from assets)
