@@ -10,8 +10,8 @@ This server provides:
 
 # ruff: noqa: E402
 
-import importlib.util
 import importlib.resources as pkg_resources
+import importlib.util
 import json
 import logging
 import os
