@@ -11,6 +11,7 @@ This server provides:
 # ruff: noqa: E402
 
 import importlib.util
+import importlib.resources as pkg_resources
 import json
 import logging
 import os
@@ -47,8 +48,6 @@ from pydantic import BaseModel
 # Add project root to Python path for core imports
 # sciplex-flow/backend/main.py -> sciplex-flow/backend -> sciplex-flow -> repo root
 project_root = Path(__file__).parent.parent.parent
-repo_root = project_root.parent
-core_root = repo_root / "sciplex_core"
 sys.path.insert(0, str(project_root))
 
 # Workspace configuration
@@ -167,42 +166,43 @@ def initialize_workspace():
     workspace_icons_dir = get_workspace_icons_dir()
 
     # Copy default libraries to workspace/libraries/default folder
-    source_dir = core_root / "libraries" / "default"
     default_dest_dir = workspace_libraries_dir / "default"
     default_dest_dir.mkdir(parents=True, exist_ok=True)
 
-    if source_dir.exists():
-        logger.info(f"Checking default libraries in {default_dest_dir}")
-        # Files to copy (exclude __init__.py, __pycache__, and tutorial.py)
-        node_files = ["_helpers.py", "data.py", "math.py", "transform.py", "visuals.py", "machine_learning.py"]
+    try:
+        with pkg_resources.as_file(pkg_resources.files("sciplex_core.libraries.default")) as source_dir:
+            logger.info(f"Checking default libraries in {default_dest_dir}")
+            node_files = ["_helpers.py", "data.py", "math.py", "transform.py", "visuals.py", "machine_learning.py"]
 
-        restored_count = 0
-        for filename in node_files:
-            source_path = source_dir / filename
-            dest_path = default_dest_dir / filename
+            restored_count = 0
+            for filename in node_files:
+                source_path = source_dir / filename
+                dest_path = default_dest_dir / filename
 
-            if source_path.exists():
-                # Always restore if file doesn't exist (user may have deleted it)
-                if not dest_path.exists():
+                if source_path.exists() and not dest_path.exists():
                     shutil.copy2(str(source_path), str(dest_path))
                     logger.info(f"Restored default library file {filename}")
                     restored_count += 1
 
-        if restored_count > 0:
-            logger.info(f"Restored {restored_count} default library file(s)")
-    readme_src = Path(project_root) / "sciplex_core" / "libraries" / "README.md"
-    readme_dest = default_dest_dir / "README.md"
-    if readme_src.exists():
-        shutil.copy2(str(readme_src), str(readme_dest))
-        logger.info("Copied libraries/README.md into workspace default libraries")
-    readme_src = core_root / "libraries" / "README.md"
-    readme_dest = default_dest_dir / "README.md"
-    if readme_src.exists():
-        shutil.copy2(str(readme_src), str(readme_dest))
-        logger.info("Ensured libraries/README.md exists in workspace default libraries")
+            if restored_count > 0:
+                logger.info(f"Restored {restored_count} default library file(s)")
+
+            readme_src = source_dir.parent / "README.md"
+            readme_dest = default_dest_dir / "README.md"
+            if readme_src.exists():
+                shutil.copy2(str(readme_src), str(readme_dest))
+                logger.info("Ensured libraries/README.md exists in workspace default libraries")
+    except ModuleNotFoundError:
+        logger.warning("sciplex_core not found when trying to restore default libraries")
+    except Exception as e:
+        logger.warning(f"Could not verify/copy default libraries: {e}")
 
     # Copy default icons to workspace/icons folder
-    assets_icons_dir = core_root / "assets" / "icons"
+    try:
+        with pkg_resources.as_file(pkg_resources.files("sciplex_core.assets.icons")) as assets_icons_dir:
+            assets_icons_path = assets_icons_dir
+    except Exception:
+        assets_icons_path = project_root / "sciplex_core" / "assets" / "icons"
 
     # List of default library icons (these should always be updated from assets)
     default_library_icons = {
@@ -217,11 +217,11 @@ def initialize_workspace():
         "sort", "switch", "square",
     }
 
-    if assets_icons_dir.exists():
+    if assets_icons_path.exists():
         logger.info(f"Checking default icons in {workspace_icons_dir}")
         icons_restored = 0
         icons_updated = 0
-        for icon_file in assets_icons_dir.iterdir():
+        for icon_file in assets_icons_path.iterdir():
             if icon_file.is_file() and icon_file.suffix.lower() in ['.png', '.svg', '.jpg', '.jpeg']:
                 icon_name = icon_file.stem  # Name without extension
 
