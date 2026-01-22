@@ -34,7 +34,7 @@ interface ScalarPreview {
 
 interface PlotPreview {
   kind: 'plot';
-  plot_type: 'matplotlib' | 'plotly';
+  plot_type: 'plotly';
   figure: any;
 }
 
@@ -518,61 +518,73 @@ function DisplayNode(props: any): JSX.Element {
             }
 
             return (
-              <div className="h-full w-full">
-                {(() => {
-                  const baseLayout = preview.figure.layout || {};
-                  const layout = { ...baseLayout };
+              <div className="h-full w-full relative">
+                {/* Plot area: stop propagation so Plotly can capture drag/zoom; outer container still draggable */}
+                <div
+                  className="absolute inset-0 nodrag nopan"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onMouseUp={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onPointerUp={(e) => e.stopPropagation()}
+                  onPointerMove={(e) => e.stopPropagation()}
+                  onWheel={(e) => e.stopPropagation()}
+                >
+                  {(() => {
+                    const baseLayout = preview.figure.layout || {};
+                    const layout = { ...baseLayout };
 
-                  // Dark theme defaults (do not override explicit values)
-                  if (!layout.paper_bgcolor) layout.paper_bgcolor = '#121218';
-                  if (!layout.plot_bgcolor) layout.plot_bgcolor = '#121218';
+                    // Dark theme defaults (do not override explicit values)
+                    if (!layout.paper_bgcolor) layout.paper_bgcolor = '#121218';
+                    if (!layout.plot_bgcolor) layout.plot_bgcolor = '#121218';
 
-                  const font = { ...(layout.font || {}) };
-                  if (!font.color) font.color = '#e5e7eb';
-                  layout.font = font;
+                    const font = { ...(layout.font || {}) };
+                    if (!font.color) font.color = '#e5e7eb';
+                    layout.font = font;
 
-                  const xaxis = { ...(layout.xaxis || {}) };
-                  if (!xaxis.gridcolor) xaxis.gridcolor = 'rgba(255, 255, 255, 0.1)';
-                  if (!xaxis.color) xaxis.color = font.color;
-                  if (xaxis.automargin === undefined) xaxis.automargin = true; // tighter fit around labels
-                  layout.xaxis = xaxis;
+                    const xaxis = { ...(layout.xaxis || {}) };
+                    if (!xaxis.gridcolor) xaxis.gridcolor = 'rgba(255, 255, 255, 0.1)';
+                    if (!xaxis.color) xaxis.color = font.color;
+                    if (xaxis.automargin === undefined) xaxis.automargin = true; // tighter fit around labels
+                    layout.xaxis = xaxis;
 
-                  const yaxis = { ...(layout.yaxis || {}) };
-                  if (!yaxis.gridcolor) yaxis.gridcolor = 'rgba(255, 255, 255, 0.1)';
-                  if (!yaxis.color) yaxis.color = font.color;
-                  if (yaxis.automargin === undefined) yaxis.automargin = true; // tighter fit around labels
-                  layout.yaxis = yaxis;
+                    const yaxis = { ...(layout.yaxis || {}) };
+                    if (!yaxis.gridcolor) yaxis.gridcolor = 'rgba(255, 255, 255, 0.1)';
+                    if (!yaxis.color) yaxis.color = font.color;
+                    if (yaxis.automargin === undefined) yaxis.automargin = true; // tighter fit around labels
+                    layout.yaxis = yaxis;
 
-                  layout.autosize = true;
-                  layout.margin = {
-                    l: 40,
-                    r: 20,
-                    t: 30,
-                    b: 30,
-                    pad: layout.margin?.pad ?? 2,
-                    ...(baseLayout.margin || {}),
-                  };
+                    layout.autosize = true;
+                    layout.margin = {
+                      l: 40,
+                      r: 20,
+                      t: 30,
+                      b: 30,
+                      pad: layout.margin?.pad ?? 2,
+                      ...(baseLayout.margin || {}),
+                    };
 
-                  return (
-                    <Plot
-                      data={preview.figure.data}
-                      layout={layout}
-                      config={{
-                        displaylogo: false,
-                        responsive: true,
-                        scrollZoom: true,
-                        toImageButtonOptions: {
-                          format: 'png',
-                          width: 1200,
-                          height: 800,
-                          scale: 2,
-                        },
-                      }}
-                      style={{ width: '100%', height: '100%' }}
-                      useResizeHandler
-                    />
-                  );
-                })()}
+                    return (
+                      <Plot
+                        data={preview.figure.data}
+                        layout={layout}
+                        config={{
+                          displaylogo: false,
+                          responsive: true,
+                          scrollZoom: true,
+                          toImageButtonOptions: {
+                            format: 'png',
+                            width: 1200,
+                            height: 800,
+                            scale: 2,
+                          },
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        useResizeHandler
+                      />
+                    );
+                  })()}
+                </div>
               </div>
             );
           })()
@@ -704,13 +716,11 @@ function DisplayNode(props: any): JSX.Element {
  
 function _PlotRenderer({ 
   figure, 
-  plotType, 
   isPlotInteractive, 
   setIsPlotInteractive, 
   plotInteractionTimeoutRef 
 }: {
   figure: any;
-  plotType: 'matplotlib' | 'plotly';
   isPlotInteractive: boolean;
   setIsPlotInteractive: (value: boolean) => void;
   plotInteractionTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -722,16 +732,12 @@ function _PlotRenderer({
       if (!figure || !figure.layout) {
         return {
           autosize: true,
-          paper_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
-          plot_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
+          paper_bgcolor: '#121218',
+          plot_bgcolor: '#121218',
         };
       }
 
-      const baseLayout = plotType === 'matplotlib' ? {
-        // For matplotlib plots, preserve the original styling (white background, black text)
-        ...figure.layout,
-      } : {
-        // For native Plotly plots, apply dark theme to match Display node background
+      const baseLayout = {
         ...figure.layout,
         paper_bgcolor: figure.layout?.paper_bgcolor || '#121218',
         plot_bgcolor: figure.layout?.plot_bgcolor || '#121218',
@@ -758,11 +764,11 @@ function _PlotRenderer({
       setPlotError(e instanceof Error ? e.message : 'Layout calculation failed');
       return {
         autosize: true,
-        paper_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
-        plot_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
+        paper_bgcolor: '#121218',
+        plot_bgcolor: '#121218',
       };
     }
-  }, [figure, plotType]);
+  }, [figure]);
 
   // Reset error when figure changes
   useEffect(() => {
@@ -792,7 +798,7 @@ function _PlotRenderer({
   try {
     return (
       <div 
-        className={`absolute inset-0 ${plotType === 'matplotlib' ? 'bg-white' : ''}`}
+        className="absolute inset-0"
         style={{ pointerEvents: isPlotInteractive ? 'auto' : 'none' }}
         onMouseEnter={() => {
           // Enable interaction when mouse enters plot area

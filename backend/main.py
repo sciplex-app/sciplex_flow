@@ -22,12 +22,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Set matplotlib backend to Agg (non-interactive) before any library imports
-# This must be done before libraries (like visuals.py) are loaded
-import matplotlib
-
-matplotlib.use('Agg')  # Non-interactive backend for web/server
-
 import numpy as np
 import pandas as pd
 from fastapi import (
@@ -1480,141 +1474,6 @@ async def preview_data_csv(
     )
 
 
-# ============================================================================
-# Plot Endpoints
-# ============================================================================
-
-def _apply_matplotlib_styling(plotly_fig, mpl_fig):
-    """
-    Apply matplotlib styling to a Plotly figure to preserve the original appearance.
-
-    This function ensures that matplotlib plots converted to Plotly maintain:
-    - White background (matplotlib default)
-    - Black text and labels
-    - Proper grid styling
-    - Original colors from matplotlib
-    """
-    try:
-        # Get axes from matplotlib figure
-        axes = mpl_fig.get_axes()
-        if not axes:
-            return
-
-        # Extract title from matplotlib figure or first axis
-        title_text = None
-        title_size = 12
-        try:
-            if hasattr(mpl_fig, '_suptitle') and mpl_fig._suptitle:
-                title_text = mpl_fig._suptitle.get_text()
-                title_size = mpl_fig._suptitle.get_fontsize() or 12
-            elif axes and axes[0].get_title():
-                title_text = axes[0].get_title().get_text()
-                title_size = axes[0].get_title().get_fontsize() or 12
-        except Exception:
-            pass
-
-        # Base layout updates - matplotlib defaults
-        layout_updates = {
-            'paper_bgcolor': 'white',  # matplotlib default figure background
-            'plot_bgcolor': 'white',  # matplotlib default plot background
-            'font': {
-                'family': 'Arial, sans-serif',  # Closest to matplotlib default
-                'size': 10,
-                'color': 'black'
-            },
-        }
-
-        if title_text:
-            layout_updates['title'] = {
-                'text': title_text,
-                'font': {
-                    'size': title_size,
-                    'color': 'black'
-                },
-                'x': 0.5,
-                'xanchor': 'center'
-            }
-
-        plotly_fig.update_layout(**layout_updates)
-
-        # Update each axis to match matplotlib styling
-        for i, ax in enumerate(axes):
-            # Check if grid is enabled - matplotlib often has grid enabled
-            grid_visible = True
-            try:
-                if hasattr(ax, '_gridOnMajor'):
-                    grid_visible = ax._gridOnMajor
-                elif hasattr(ax, 'gridlines') and ax.gridlines:
-                    grid_visible = True
-            except Exception:
-                pass
-
-            # Matplotlib default grid: light gray, slightly transparent
-            grid_color = 'rgba(0, 0, 0, 0.15)'
-
-            # Get axis labels
-            xlabel = ax.get_xlabel()
-            ylabel = ax.get_ylabel()
-
-            # Determine axis reference for subplots
-            row_num = i + 1 if len(axes) > 1 else None
-
-            # Update x-axis with matplotlib-like styling
-            xaxis_update = {
-                'showgrid': grid_visible,
-                'gridcolor': grid_color,
-                'gridwidth': 1,
-                'zeroline': False,
-                'showline': True,
-                'linecolor': 'black',
-                'linewidth': 1,
-                'tickfont': {'color': 'black', 'size': 10},
-                'tickcolor': 'black',
-            }
-            if xlabel:
-                xaxis_update['title'] = {
-                    'text': xlabel,
-                    'font': {'color': 'black', 'size': 12}
-                }
-
-            if row_num:
-                plotly_fig.update_xaxes(**xaxis_update, row=row_num, col=1)
-            else:
-                plotly_fig.update_xaxes(**xaxis_update)
-
-            # Update y-axis with matplotlib-like styling
-            yaxis_update = {
-                'showgrid': grid_visible,
-                'gridcolor': grid_color,
-                'gridwidth': 1,
-                'zeroline': False,
-                'showline': True,
-                'linecolor': 'black',
-                'linewidth': 1,
-                'tickfont': {'color': 'black', 'size': 10},
-                'tickcolor': 'black',
-            }
-            if ylabel:
-                yaxis_update['title'] = {
-                    'text': ylabel,
-                    'font': {'color': 'black', 'size': 12}
-                }
-
-            if row_num:
-                plotly_fig.update_yaxes(**yaxis_update, row=row_num, col=1)
-            else:
-                plotly_fig.update_yaxes(**yaxis_update)
-
-        # Note: mpl_to_plotly should preserve trace colors automatically
-        # If colors are still wrong, we might need to manually extract and apply them
-
-    except Exception as e:
-        logger.warning(f"Could not fully apply matplotlib styling: {e}")
-        import traceback
-        logger.debug(traceback.format_exc())
-        # Continue anyway - the conversion will still work, just without perfect styling
-
-
 @app.get("/api/socket-data")
 async def get_socket_data(
     node_id: str = Query(..., description="ID of the upstream node that produced the data"),
@@ -1640,44 +1499,6 @@ async def get_socket_data(
         raise HTTPException(status_code=400, detail="No data available on this socket. Execute the node first.")
 
     try:
-        # Check if it's a matplotlib Figure
-        from matplotlib.figure import Figure as MplFigure
-        if isinstance(value, MplFigure):
-            # Convert matplotlib to Plotly
-            try:
-                # Try the modern approach first (plotly >= 5.0)
-                try:
-                    from plotly.tools import mpl_to_plotly
-                    plotly_fig = mpl_to_plotly(value)
-                except ImportError:
-                    # Fallback to older import style
-                    import plotly.tools as pt
-                    if hasattr(pt, 'mpl_to_plotly'):
-                        plotly_fig = pt.mpl_to_plotly(value)
-                    else:
-                        raise ImportError("mpl_to_plotly not found in plotly.tools")
-
-                # Apply matplotlib styling to preserve appearance
-                _apply_matplotlib_styling(plotly_fig, value)
-
-                return {
-                    "success": True,
-                    "data_type": "plot",
-                    "plot_type": "matplotlib",
-                    "figure": plotly_fig.to_dict()
-                }
-            except ImportError:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Plotly is required to convert matplotlib figures. Install with: pip install plotly"
-                )
-            except Exception as e:
-                logger.error(f"Error converting matplotlib figure to Plotly: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to convert matplotlib figure: {str(e)}"
-                )
-
         # Check if it's a Plotly figure
         try:
             import plotly.graph_objects as go
@@ -1751,7 +1572,6 @@ async def get_plot_data(
     Get plot data from a node's output socket (legacy endpoint, redirects to /api/socket-data).
     
     Supports:
-    - Matplotlib Figure objects (converted to Plotly)
     - Plotly figure objects (exported directly)
     
     Returns a Plotly JSON figure that can be rendered in the browser.
@@ -1985,7 +1805,6 @@ async def save_node_to_library(node_id: str, request: SaveNodeToLibraryRequest, 
                 "# Auto-generated by Sciplex Script node\n"
                 "import pandas as pd\n"
                 "import numpy as np\n"
-                "import matplotlib.pyplot as plt\n"
                 "import sklearn\n\n"
             )
 

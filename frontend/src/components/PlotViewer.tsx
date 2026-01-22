@@ -10,7 +10,7 @@ interface PlotViewerProps {
 
 export default function PlotViewer({ nodeId, socketId, onClose }: PlotViewerProps) {
   const [plotData, setPlotData] = useState<any>(null);
-  const [plotType, setPlotType] = useState<'matplotlib' | 'plotly' | null>(null);
+  const [plotType, setPlotType] = useState<'plotly' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +35,7 @@ export default function PlotViewer({ nodeId, socketId, onClose }: PlotViewerProp
         }
         
         setPlotData(data.figure);
-        setPlotType(data.plot_type || 'plotly'); // Store plot type to preserve styling
+        setPlotType('plotly'); // Plotly only
       } catch (err: any) {
         console.error('Error loading plot:', err);
         setError(err?.message || 'Failed to load plot');
@@ -107,14 +107,11 @@ export default function PlotViewer({ nodeId, socketId, onClose }: PlotViewerProp
           )}
           
           {plotData && !loading && !error && (
-            <div className={`w-full h-full p-4 ${plotType === 'matplotlib' ? 'bg-white' : ''}`}>
+            <div className="w-full h-full p-4">
               <Plot
                 data={plotData.data || []}
-                layout={plotType === 'matplotlib' ? {
-                  // For matplotlib plots, preserve the original styling (white background, black text)
-                  ...plotData.layout,
-                } : {
-                  // For native Plotly plots, apply dark theme
+                layout={{
+                  // Apply dark theme
                   ...plotData.layout,
                   paper_bgcolor: plotData.layout?.paper_bgcolor || '#1e1e24',
                   plot_bgcolor: plotData.layout?.plot_bgcolor || '#1e1e24',
