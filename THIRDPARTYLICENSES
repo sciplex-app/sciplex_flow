@@ -8,6 +8,7 @@ Runtime (pyproject dependencies):
 - websockets — BSD-3-Clause — https://websockets.readthedocs.io/
 - pydantic — Apache-2.0 — https://docs.pydantic.dev/
 - python-multipart — Apache-2.0 — https://github.com/andrew-d/python-multipart
+- requests — Apache-2.0 — https://requests.readthedocs.io/
 
 Development-only extras:
 - pytest — MIT — https://docs.pytest.org/
