@@ -34,7 +34,7 @@ interface ScalarPreview {
 
 interface PlotPreview {
   kind: 'plot';
-  plot_type: 'matplotlib' | 'plotly';
+  plot_type: 'plotly';
   figure: any;
 }
 
@@ -83,10 +83,7 @@ function DisplayNode(props: any): JSX.Element {
    
   const [isPlotInteractive, setIsPlotInteractive] = useState(false);
   const plotInteractionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  // Performance optimization: always use thumbnail mode
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [thumbnailLoading, setThumbnailLoading] = useState(false);
+
   const [isInViewport, setIsInViewport] = useState(true); // Track if node is visible
   const nodeRef = useRef<HTMLDivElement>(null);
 
@@ -105,7 +102,7 @@ function DisplayNode(props: any): JSX.Element {
   // Track the previous source to detect source changes
   const prevSourceRef = useRef<{ nodeId: string; socketId: string } | null>(null);
   
-  // Clear preview and thumbnail when source disconnects or changes
+  // Clear preview when source disconnects or changes
   useEffect(() => {
     const prevSource = prevSourceRef.current;
     const currentSourceKey = sourceInfo ? `${sourceInfo.nodeId}-${sourceInfo.socketId}` : null;
@@ -114,13 +111,6 @@ function DisplayNode(props: any): JSX.Element {
     // If source changed or disconnected, clear everything
     if (currentSourceKey !== prevSourceKey) {
       setPreview({ kind: 'none' });
-      // Use callback form to avoid dependency on thumbnailUrl
-      setThumbnailUrl((currentUrl) => {
-        if (currentUrl) {
-          URL.revokeObjectURL(currentUrl);
-        }
-        return null;
-      });
     }
     
     prevSourceRef.current = sourceInfo;
@@ -130,15 +120,6 @@ function DisplayNode(props: any): JSX.Element {
   useEffect(() => {
     const handleReset = () => {
       setPreview({ kind: 'none' });
-      setThumbnailUrl((currentUrl) => {
-        if (currentUrl) {
-          URL.revokeObjectURL(currentUrl);
-        }
-        return null;
-      });
-      // Reset thumbnail loading state
-      thumbnailLoadingRef.current = false;
-      thumbnailSourceKeyRef.current = null;
     };
     
     window.addEventListener('resetDisplayNodes', handleReset);
@@ -153,12 +134,8 @@ function DisplayNode(props: any): JSX.Element {
       if (plotInteractionTimeoutRef.current) {
         clearTimeout(plotInteractionTimeoutRef.current);
       }
-      // Cleanup thumbnail URL
-      if (thumbnailUrl) {
-        URL.revokeObjectURL(thumbnailUrl);
-      }
     };
-  }, [thumbnailUrl]);
+  }, []);
 
   // Viewport detection using Intersection Observer (only render visible plots)
   useEffect(() => {
@@ -186,136 +163,12 @@ function DisplayNode(props: any): JSX.Element {
     };
   }, []);
 
-  // Reset thumbnail when plot figure changes
-  // Create a hash-like key from figure data to detect changes (including colors, layout, etc.)
-  const figureKeyRef = useRef<string | null>(null);
-  const [figureKeyVersion, setFigureKeyVersion] = useState(0); // Used to trigger thumbnail reload
-  
-  // Load thumbnail when plot data is available
-  const thumbnailLoadingRef = useRef(false);
-  const thumbnailSourceKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (preview.kind === 'plot' && sourceInfo && isInViewport && !thumbnailLoadingRef.current) {
-      // Create a key that identifies the current data source + figure state
-      const currentSourceKey = `${sourceInfo.nodeId}-${sourceInfo.socketId}-${figureKeyRef.current || 'no-figure'}`;
-      
-      // Only skip if we have a thumbnail for this exact source and figure state
-      if (thumbnailUrl && thumbnailSourceKeyRef.current === currentSourceKey) {
-        return;
-      }
-      
-      thumbnailLoadingRef.current = true;
-      setThumbnailLoading(true);
-      thumbnailSourceKeyRef.current = currentSourceKey;
-      
-      const thumbnailParams = new URLSearchParams({
-        node_id: sourceInfo.nodeId,
-        socket_id: sourceInfo.socketId,
-        width: String(Math.max(200, size.width * 2)), // 2x for retina, min 200px
-        height: String(Math.max(150, size.height * 2)),
-        scale: '1.0',
-        // Add cache-busting parameter based on figure key version to ensure fresh fetch on refresh
-        _v: String(figureKeyVersion),
-      });
-      
-      // Fetch thumbnail
-      fetch(`/api/plot/thumbnail?${thumbnailParams.toString()}`)
-        .then((res) => {
-          if (!res.ok) {
-            // If 503 (service unavailable, e.g., kaleido missing), log warning
-            if (res.status === 503) {
-              console.warn('Thumbnail generation not available (kaleido may be missing).');
-            }
-            throw new Error(`Failed to load thumbnail: ${res.status}`);
-          }
-          return res.blob();
-        })
-        .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          // Revoke old URL if exists
-          if (thumbnailUrl) {
-            URL.revokeObjectURL(thumbnailUrl);
-          }
-          setThumbnailUrl(url);
-          setThumbnailLoading(false);
-          thumbnailLoadingRef.current = false;
-        })
-        .catch((err) => {
-          console.error('Error loading thumbnail:', err);
-          setThumbnailLoading(false);
-          thumbnailLoadingRef.current = false;
-          thumbnailSourceKeyRef.current = null; // Reset on error so it can retry
-        });
-    }
-  }, [preview.kind, sourceInfo, size.width, size.height, isInViewport, thumbnailUrl, figureKeyVersion, preview.kind === 'plot' ? preview.figure : null]);
-
-  // Reset thumbnail when plot figure changes
-  useEffect(() => {
-    if (preview.kind === 'plot' && preview.figure) {
-      // Create a key that captures data, layout, and trace properties (including colors)
-      // This will detect changes in colors, markers, lines, etc.
-      const figureData = preview.figure.data || [];
-      const layout = preview.figure.layout || {};
-      
-      // Extract key properties from each trace that might change (colors, markers, etc.)
-      const traceKeys = figureData.map((trace: any) => ({
-        type: trace.type,
-        marker: trace.marker ? JSON.stringify(trace.marker) : null,
-        line: trace.line ? JSON.stringify(trace.line) : null,
-        fillcolor: trace.fillcolor,
-        name: trace.name,
-      }));
-      
-      // Also include layout properties that affect appearance
-      const layoutKey = {
-        title: layout.title || '',
-        paper_bgcolor: layout.paper_bgcolor,
-        plot_bgcolor: layout.plot_bgcolor,
-        xaxis: layout.xaxis ? { title: layout.xaxis.title } : null,
-        yaxis: layout.yaxis ? { title: layout.yaxis.title } : null,
-      };
-      
-      const newKey = JSON.stringify({
-        plotType: preview.plot_type,
-        traceKeys,
-        layoutKey,
-      });
-      
-      if (figureKeyRef.current !== null && figureKeyRef.current !== newKey) {
-        // Figure changed, clear thumbnail to force reload
-        if (thumbnailUrl) {
-          URL.revokeObjectURL(thumbnailUrl);
-          setThumbnailUrl(null);
-        }
-        thumbnailLoadingRef.current = false;
-        thumbnailSourceKeyRef.current = null; // Reset source key to force reload
-        setFigureKeyVersion(v => v + 1); // Trigger thumbnail reload
-      }
-      
-      figureKeyRef.current = newKey;
-    }
-  }, [preview.kind, preview.kind === 'plot' ? (preview as Extract<PreviewState, { kind: 'plot' }>).figure : null, preview.kind === 'plot' ? (preview as Extract<PreviewState, { kind: 'plot' }>).plot_type : null, thumbnailUrl]);
-
   // Track the last fetched data to prevent unnecessary re-fetches
   const lastFetchedRef = useRef<{ nodeId: string; socketId: string; page: number } | null>(null);
   const isFetchingRef = useRef(false);
 
-  // Helper to clear thumbnail state (only used for plots)
-  const clearThumbnailState = useCallback(() => {
-    setThumbnailUrl((currentUrl) => {
-      if (currentUrl) {
-        URL.revokeObjectURL(currentUrl);
-      }
-      return null;
-    });
-    thumbnailLoadingRef.current = false;
-    thumbnailSourceKeyRef.current = null;
-    figureKeyRef.current = null;
-    setFigureKeyVersion(v => v + 1);
-  }, []);
-
   // Fetch preview data - called on explicit execution
-  const fetchPreview = useCallback(async (clearThumbnail = true) => {
+  const fetchPreview = useCallback(async () => {
     if (!sourceInfo) {
       setPreview({ kind: 'none' });
       lastFetchedRef.current = null;
@@ -359,10 +212,6 @@ function DisplayNode(props: any): JSX.Element {
 
       // Handle different data types
       if (result.data_type === 'plot') {
-        // Clear thumbnail state only for plots and only if requested
-        if (clearThumbnail) {
-          clearThumbnailState();
-        }
         setPreview({
           kind: 'plot',
           plot_type: result.plot_type,
@@ -409,7 +258,7 @@ function DisplayNode(props: any): JSX.Element {
     } finally {
       isFetchingRef.current = false;
     }
-  }, [sourceInfo, page, pageSize, clearThumbnailState]);
+  }, [sourceInfo, page, pageSize]);
 
   // Execute Display node handler - executes the node and fetches preview
   const handleExecute = useCallback(async () => {
@@ -419,8 +268,8 @@ function DisplayNode(props: any): JSX.Element {
     try {
       // Execute the Display node (this will also execute upstream nodes if needed)
       await executeNode(id, singleNodeExecutionMode);
-      // After execution, fetch the preview data (clear thumbnail for fresh plot)
-      await fetchPreview(true);
+      // After execution, fetch the preview data
+      await fetchPreview();
     } catch (error) {
       console.error('Error executing Display node:', error);
     } finally {
@@ -437,8 +286,7 @@ function DisplayNode(props: any): JSX.Element {
     if (prevPageRef.current !== page) {
       prevPageRef.current = page;
       if (sourceInfo && preview.kind === 'table') {
-        // Don't clear thumbnail for table pagination
-        fetchPreview(false).catch(console.error);
+        fetchPreview().catch(console.error);
       }
     }
   }, [page, sourceInfo, preview.kind, fetchPreview]);
@@ -448,7 +296,7 @@ function DisplayNode(props: any): JSX.Element {
     const handleGraphExecutionCompleted = () => {
       // Only fetch if we have a source connected
       if (sourceInfo) {
-        fetchPreview(true).catch(console.error);
+        fetchPreview().catch(console.error);
       }
     };
     
@@ -659,15 +507,6 @@ function DisplayNode(props: any): JSX.Element {
               );
             }
 
-            // Always show thumbnail mode for performance
-            if (thumbnailLoading) {
-              return (
-                <div className="h-full flex items-center justify-center px-2 py-1.5">
-                  <p className="text-[11px] text-gray-400">Loading preview...</p>
-                </div>
-              );
-            }
-
             if (!isInViewport) {
               return (
                 <div className="h-full flex items-center justify-center px-2 py-1.5">
@@ -678,25 +517,74 @@ function DisplayNode(props: any): JSX.Element {
               );
             }
 
-            if (thumbnailUrl) {
-              return (
-                <div className="relative h-full w-full">
-                  <img
-                    src={thumbnailUrl}
-                    alt="Plot preview"
-                    className="w-full h-full object-contain"
-                    style={{ imageRendering: 'auto' }}
-                  />
-                </div>
-              );
-            }
-
-            // Fallback: show message if thumbnail failed to load
             return (
-              <div className="h-full flex items-center justify-center px-2 py-1.5">
-                <p className="text-[11px] text-gray-500 text-center px-2">
-                  Preview unavailable
-                </p>
+              <div className="h-full w-full relative">
+                {/* Plot area: stop propagation so Plotly can capture drag/zoom; outer container still draggable */}
+                <div
+                  className="absolute inset-0 nodrag nopan"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onMouseUp={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onPointerUp={(e) => e.stopPropagation()}
+                  onPointerMove={(e) => e.stopPropagation()}
+                  onWheel={(e) => e.stopPropagation()}
+                >
+                  {(() => {
+                    const baseLayout = preview.figure.layout || {};
+                    const layout = { ...baseLayout };
+
+                    // Dark theme defaults (do not override explicit values)
+                    if (!layout.paper_bgcolor) layout.paper_bgcolor = '#121218';
+                    if (!layout.plot_bgcolor) layout.plot_bgcolor = '#121218';
+
+                    const font = { ...(layout.font || {}) };
+                    if (!font.color) font.color = '#e5e7eb';
+                    layout.font = font;
+
+                    const xaxis = { ...(layout.xaxis || {}) };
+                    if (!xaxis.gridcolor) xaxis.gridcolor = 'rgba(255, 255, 255, 0.1)';
+                    if (!xaxis.color) xaxis.color = font.color;
+                    if (xaxis.automargin === undefined) xaxis.automargin = true; // tighter fit around labels
+                    layout.xaxis = xaxis;
+
+                    const yaxis = { ...(layout.yaxis || {}) };
+                    if (!yaxis.gridcolor) yaxis.gridcolor = 'rgba(255, 255, 255, 0.1)';
+                    if (!yaxis.color) yaxis.color = font.color;
+                    if (yaxis.automargin === undefined) yaxis.automargin = true; // tighter fit around labels
+                    layout.yaxis = yaxis;
+
+                    layout.autosize = true;
+                    layout.margin = {
+                      l: 40,
+                      r: 20,
+                      t: 30,
+                      b: 30,
+                      pad: layout.margin?.pad ?? 2,
+                      ...(baseLayout.margin || {}),
+                    };
+
+                    return (
+                      <Plot
+                        data={preview.figure.data}
+                        layout={layout}
+                        config={{
+                          displaylogo: false,
+                          responsive: true,
+                          scrollZoom: true,
+                          toImageButtonOptions: {
+                            format: 'png',
+                            width: 1200,
+                            height: 800,
+                            scale: 2,
+                          },
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        useResizeHandler
+                      />
+                    );
+                  })()}
+                </div>
               </div>
             );
           })()
@@ -828,13 +716,11 @@ function DisplayNode(props: any): JSX.Element {
  
 function _PlotRenderer({ 
   figure, 
-  plotType, 
   isPlotInteractive, 
   setIsPlotInteractive, 
   plotInteractionTimeoutRef 
 }: {
   figure: any;
-  plotType: 'matplotlib' | 'plotly';
   isPlotInteractive: boolean;
   setIsPlotInteractive: (value: boolean) => void;
   plotInteractionTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -846,16 +732,12 @@ function _PlotRenderer({
       if (!figure || !figure.layout) {
         return {
           autosize: true,
-          paper_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
-          plot_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
+          paper_bgcolor: '#121218',
+          plot_bgcolor: '#121218',
         };
       }
 
-      const baseLayout = plotType === 'matplotlib' ? {
-        // For matplotlib plots, preserve the original styling (white background, black text)
-        ...figure.layout,
-      } : {
-        // For native Plotly plots, apply dark theme to match Display node background
+      const baseLayout = {
         ...figure.layout,
         paper_bgcolor: figure.layout?.paper_bgcolor || '#121218',
         plot_bgcolor: figure.layout?.plot_bgcolor || '#121218',
@@ -882,11 +764,11 @@ function _PlotRenderer({
       setPlotError(e instanceof Error ? e.message : 'Layout calculation failed');
       return {
         autosize: true,
-        paper_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
-        plot_bgcolor: plotType === 'matplotlib' ? 'white' : '#121218',
+        paper_bgcolor: '#121218',
+        plot_bgcolor: '#121218',
       };
     }
-  }, [figure, plotType]);
+  }, [figure]);
 
   // Reset error when figure changes
   useEffect(() => {
@@ -916,7 +798,7 @@ function _PlotRenderer({
   try {
     return (
       <div 
-        className={`absolute inset-0 ${plotType === 'matplotlib' ? 'bg-white' : ''}`}
+        className="absolute inset-0"
         style={{ pointerEvents: isPlotInteractive ? 'auto' : 'none' }}
         onMouseEnter={() => {
           // Enable interaction when mouse enters plot area

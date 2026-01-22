@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sciplex-flow"
-version = "0.1.4"
+version = "0.1.5"
 description = "Local web app for Sciplex visual programming - node-based data science workflows"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,13 +27,14 @@ classifiers = [
 
 dependencies = [
     # Core dependency
-    "sciplex-core>=0.1.1",
+    "sciplex-core>=0.1.2",
     # Web framework
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
     "websockets>=12.0",
     "pydantic[email]>=2.5.0",
     "python-multipart>=0.0.6",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]

@@ -11,7 +11,6 @@ This server provides:
 # ruff: noqa: E402
 
 import importlib.resources as pkg_resources
-import importlib.util
 import json
 import logging
 import os
@@ -22,12 +21,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-# Set matplotlib backend to Agg (non-interactive) before any library imports
-# This must be done before libraries (like visuals.py) are loaded
-import matplotlib
-
-matplotlib.use('Agg')  # Non-interactive backend for web/server
 
 import numpy as np
 import pandas as pd
@@ -1481,141 +1474,6 @@ async def preview_data_csv(
     )
 
 
-# ============================================================================
-# Plot Endpoints
-# ============================================================================
-
-def _apply_matplotlib_styling(plotly_fig, mpl_fig):
-    """
-    Apply matplotlib styling to a Plotly figure to preserve the original appearance.
-
-    This function ensures that matplotlib plots converted to Plotly maintain:
-    - White background (matplotlib default)
-    - Black text and labels
-    - Proper grid styling
-    - Original colors from matplotlib
-    """
-    try:
-        # Get axes from matplotlib figure
-        axes = mpl_fig.get_axes()
-        if not axes:
-            return
-
-        # Extract title from matplotlib figure or first axis
-        title_text = None
-        title_size = 12
-        try:
-            if hasattr(mpl_fig, '_suptitle') and mpl_fig._suptitle:
-                title_text = mpl_fig._suptitle.get_text()
-                title_size = mpl_fig._suptitle.get_fontsize() or 12
-            elif axes and axes[0].get_title():
-                title_text = axes[0].get_title().get_text()
-                title_size = axes[0].get_title().get_fontsize() or 12
-        except Exception:
-            pass
-
-        # Base layout updates - matplotlib defaults
-        layout_updates = {
-            'paper_bgcolor': 'white',  # matplotlib default figure background
-            'plot_bgcolor': 'white',  # matplotlib default plot background
-            'font': {
-                'family': 'Arial, sans-serif',  # Closest to matplotlib default
-                'size': 10,
-                'color': 'black'
-            },
-        }
-
-        if title_text:
-            layout_updates['title'] = {
-                'text': title_text,
-                'font': {
-                    'size': title_size,
-                    'color': 'black'
-                },
-                'x': 0.5,
-                'xanchor': 'center'
-            }
-
-        plotly_fig.update_layout(**layout_updates)
-
-        # Update each axis to match matplotlib styling
-        for i, ax in enumerate(axes):
-            # Check if grid is enabled - matplotlib often has grid enabled
-            grid_visible = True
-            try:
-                if hasattr(ax, '_gridOnMajor'):
-                    grid_visible = ax._gridOnMajor
-                elif hasattr(ax, 'gridlines') and ax.gridlines:
-                    grid_visible = True
-            except Exception:
-                pass
-
-            # Matplotlib default grid: light gray, slightly transparent
-            grid_color = 'rgba(0, 0, 0, 0.15)'
-
-            # Get axis labels
-            xlabel = ax.get_xlabel()
-            ylabel = ax.get_ylabel()
-
-            # Determine axis reference for subplots
-            row_num = i + 1 if len(axes) > 1 else None
-
-            # Update x-axis with matplotlib-like styling
-            xaxis_update = {
-                'showgrid': grid_visible,
-                'gridcolor': grid_color,
-                'gridwidth': 1,
-                'zeroline': False,
-                'showline': True,
-                'linecolor': 'black',
-                'linewidth': 1,
-                'tickfont': {'color': 'black', 'size': 10},
-                'tickcolor': 'black',
-            }
-            if xlabel:
-                xaxis_update['title'] = {
-                    'text': xlabel,
-                    'font': {'color': 'black', 'size': 12}
-                }
-
-            if row_num:
-                plotly_fig.update_xaxes(**xaxis_update, row=row_num, col=1)
-            else:
-                plotly_fig.update_xaxes(**xaxis_update)
-
-            # Update y-axis with matplotlib-like styling
-            yaxis_update = {
-                'showgrid': grid_visible,
-                'gridcolor': grid_color,
-                'gridwidth': 1,
-                'zeroline': False,
-                'showline': True,
-                'linecolor': 'black',
-                'linewidth': 1,
-                'tickfont': {'color': 'black', 'size': 10},
-                'tickcolor': 'black',
-            }
-            if ylabel:
-                yaxis_update['title'] = {
-                    'text': ylabel,
-                    'font': {'color': 'black', 'size': 12}
-                }
-
-            if row_num:
-                plotly_fig.update_yaxes(**yaxis_update, row=row_num, col=1)
-            else:
-                plotly_fig.update_yaxes(**yaxis_update)
-
-        # Note: mpl_to_plotly should preserve trace colors automatically
-        # If colors are still wrong, we might need to manually extract and apply them
-
-    except Exception as e:
-        logger.warning(f"Could not fully apply matplotlib styling: {e}")
-        import traceback
-        logger.debug(traceback.format_exc())
-        # Continue anyway - the conversion will still work, just without perfect styling
-
-
 @app.get("/api/socket-data")
 async def get_socket_data(
     node_id: str = Query(..., description="ID of the upstream node that produced the data"),
@@ -1641,44 +1499,6 @@ async def get_socket_data(
         raise HTTPException(status_code=400, detail="No data available on this socket. Execute the node first.")
 
     try:
-        # Check if it's a matplotlib Figure
-        from matplotlib.figure import Figure as MplFigure
-        if isinstance(value, MplFigure):
-            # Convert matplotlib to Plotly
-            try:
-                # Try the modern approach first (plotly >= 5.0)
-                try:
-                    from plotly.tools import mpl_to_plotly
-                    plotly_fig = mpl_to_plotly(value)
-                except ImportError:
-                    # Fallback to older import style
-                    import plotly.tools as pt
-                    if hasattr(pt, 'mpl_to_plotly'):
-                        plotly_fig = pt.mpl_to_plotly(value)
-                    else:
-                        raise ImportError("mpl_to_plotly not found in plotly.tools")
-
-                # Apply matplotlib styling to preserve appearance
-                _apply_matplotlib_styling(plotly_fig, value)
-
-                return {
-                    "success": True,
-                    "data_type": "plot",
-                    "plot_type": "matplotlib",
-                    "figure": plotly_fig.to_dict()
-                }
-            except ImportError:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Plotly is required to convert matplotlib figures. Install with: pip install plotly"
-                )
-            except Exception as e:
-                logger.error(f"Error converting matplotlib figure to Plotly: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to convert matplotlib figure: {str(e)}"
-                )
-
         # Check if it's a Plotly figure
         try:
             import plotly.graph_objects as go
@@ -1752,7 +1572,6 @@ async def get_plot_data(
     Get plot data from a node's output socket (legacy endpoint, redirects to /api/socket-data).
     
     Supports:
-    - Matplotlib Figure objects (converted to Plotly)
     - Plotly figure objects (exported directly)
     
     Returns a Plotly JSON figure that can be rendered in the browser.
@@ -1771,201 +1590,6 @@ async def get_plot_data(
         "plot_type": socket_data.get("plot_type"),
         "figure": socket_data.get("figure")
     }
-
-
-@app.get("/api/plot/thumbnail")
-async def get_plot_thumbnail(
-    node_id: str = Query(..., description="ID of the upstream node that produced the plot"),
-    socket_id: str = Query(..., description="ID of the output socket carrying the plot data"),
-    width: int = Query(400, description="Thumbnail width in pixels"),
-    height: int = Query(300, description="Thumbnail height in pixels"),
-    scale: float = Query(1.0, description="Image scale factor"),
-):
-    """
-    Get a plot as a thumbnail PNG image for preview.
-    
-    Supports:
-    - Matplotlib Figure objects (converted to Plotly then to PNG)
-    - Plotly figure objects (converted directly to PNG)
-    
-    Returns a smaller, optimized thumbnail for fast loading in the flow canvas.
-    
-    Note: Requires the 'kaleido' package to be installed for image export.
-    If kaleido is not available, this endpoint will return a 503 error.
-    """
-    import plotly.graph_objects as go
-
-    # Check if kaleido is available
-    if importlib.util.find_spec("kaleido") is None:
-        logger.warning("kaleido package is not installed. Install it with: pip install kaleido")
-        raise HTTPException(
-            status_code=503,
-            detail="Thumbnail generation requires the 'kaleido' package. Please install it with: pip install kaleido"
-        )
-
-    # Get plot data
-    socket_data = await get_socket_data(node_id=node_id, socket_id=socket_id)
-
-    if socket_data.get("data_type") != "plot":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Socket data is not a plot. Got {socket_data.get('data_type', 'unknown')}"
-        )
-
-    figure_dict = socket_data.get("figure")
-    if not figure_dict:
-        raise HTTPException(status_code=400, detail="No figure data available")
-
-    try:
-        # Reconstruct Plotly figure from dict
-        fig = go.Figure(figure_dict)
-
-        # Get plot type from socket data
-        plot_type = socket_data.get("plot_type", "plotly")
-
-        # Match the frontend PlotRenderer logic exactly for background colors
-        # For matplotlib plots: preserve white background (no changes)
-        # For plotly plots: use dark theme background (#121218) matching Display node
-        if plot_type == "plotly":
-            layout_dict = figure_dict.get("layout", {})
-
-            # Get existing background colors, or use dark theme default
-            # Replace white backgrounds with dark theme
-            paper_bg = layout_dict.get("paper_bgcolor")
-            plot_bg = layout_dict.get("plot_bgcolor")
-
-            # Convert white/None to dark theme, otherwise preserve existing color
-            if not paper_bg or paper_bg == "white" or paper_bg == "#ffffff" or paper_bg == "#FFFFFF":
-                paper_bg = "#121218"
-            if not plot_bg or plot_bg == "white" or plot_bg == "#ffffff" or plot_bg == "#FFFFFF":
-                plot_bg = "#121218"
-
-            fig.update_layout(
-                paper_bgcolor=paper_bg,
-                plot_bgcolor=plot_bg,
-            )
-
-            # Update font colors for dark theme if not explicitly set
-            font_dict = layout_dict.get("font", {})
-            if not font_dict or not font_dict.get("color"):
-                # Get current font properties safely
-                font_color = "#e5e7eb"
-                font_size = 10
-
-                # Try to get existing font properties from the figure
-                if hasattr(fig.layout, 'font') and fig.layout.font:
-                    try:
-                        # If font is a dict-like object, try to get size
-                        if hasattr(fig.layout.font, 'size') and fig.layout.font.size:
-                            font_size = fig.layout.font.size
-                    except (AttributeError, TypeError):
-                        pass
-
-                # Update font with proper dictionary format
-                fig.update_layout(font={"color": font_color, "size": font_size})
-
-            # Update axis grid colors for dark theme if not explicitly set
-            xaxis_dict = layout_dict.get("xaxis", {})
-            if not xaxis_dict.get("gridcolor"):
-                fig.update_xaxes(gridcolor="rgba(255, 255, 255, 0.1)")
-
-            yaxis_dict = layout_dict.get("yaxis", {})
-            if not yaxis_dict.get("gridcolor"):
-                fig.update_yaxes(gridcolor="rgba(255, 255, 255, 0.1)")
-        # For matplotlib plots, preserve the white background (no changes needed)
-
-        # Convert to PNG bytes with smaller dimensions for thumbnail
-        img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)
-
-        # Return as PNG image response (inline, not download)
-        # Disable caching to ensure fresh thumbnails are always fetched
-        return Response(
-            content=img_bytes,
-            media_type="image/png",
-            headers={
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            }
-        )
-    except ValueError as e:
-        # Handle kaleido-related errors specifically
-        if "kaleido" in str(e).lower():
-            logger.error(f"Kaleido error: {e}")
-            raise HTTPException(
-                status_code=503,
-                detail="Thumbnail generation requires the 'kaleido' package. Please install it with: pip install kaleido"
-            )
-        raise
-    except Exception as e:
-        logger.error(f"Error generating plot thumbnail: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate plot thumbnail: {str(e)}")
-
-
-@app.get("/api/plot/download")
-async def download_plot_as_png(
-    node_id: str = Query(..., description="ID of the upstream node that produced the plot"),
-    socket_id: str = Query(..., description="ID of the output socket carrying the plot data"),
-):
-    """
-    Download a plot as PNG image.
-    
-    Supports:
-    - Matplotlib Figure objects (converted to Plotly then to PNG)
-    - Plotly figure objects (converted directly to PNG)
-    
-    Note: Requires the 'kaleido' package to be installed for image export.
-    """
-    import plotly.graph_objects as go
-
-    # Check if kaleido is available
-    if importlib.util.find_spec("kaleido") is None:
-        logger.warning("kaleido package is not installed. Install it with: pip install kaleido")
-        raise HTTPException(
-            status_code=503,
-            detail="Plot download requires the 'kaleido' package. Please install it with: pip install kaleido"
-        )
-
-    # Get plot data
-    socket_data = await get_socket_data(node_id=node_id, socket_id=socket_id)
-
-    if socket_data.get("data_type") != "plot":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Socket data is not a plot. Got {socket_data.get('data_type', 'unknown')}"
-        )
-
-    figure_dict = socket_data.get("figure")
-    if not figure_dict:
-        raise HTTPException(status_code=400, detail="No figure data available")
-
-    try:
-        # Reconstruct Plotly figure from dict
-        fig = go.Figure(figure_dict)
-
-        # Convert to PNG bytes
-        img_bytes = fig.to_image(format="png", width=1200, height=800, scale=2)
-
-        # Return as PNG file response
-        return Response(
-            content=img_bytes,
-            media_type="image/png",
-            headers={
-                "Content-Disposition": f'attachment; filename="plot_{node_id[:8]}.png"'
-            }
-        )
-    except ValueError as e:
-        # Handle kaleido-related errors specifically
-        if "kaleido" in str(e).lower():
-            logger.error(f"Kaleido error: {e}")
-            raise HTTPException(
-                status_code=503,
-                detail="Plot download requires the 'kaleido' package. Please install it with: pip install kaleido"
-            )
-        raise
-    except Exception as e:
-        logger.error(f"Error converting plot to PNG: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to convert plot to PNG: {str(e)}")
 
 
 # ============================================================================
@@ -2181,7 +1805,6 @@ async def save_node_to_library(node_id: str, request: SaveNodeToLibraryRequest, 
                 "# Auto-generated by Sciplex Script node\n"
                 "import pandas as pd\n"
                 "import numpy as np\n"
-                "import matplotlib.pyplot as plt\n"
                 "import sklearn\n\n"
             )
 
