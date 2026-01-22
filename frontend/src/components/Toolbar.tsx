@@ -71,6 +71,7 @@ export default function Toolbar({ onScriptEditorOpen, onWorkspaceOpen, onExportC
   const [conflictingProjectName, setConflictingProjectName] = useState<string | null>(null);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState<'new' | null>(null);
+  const [execModeIconError, setExecModeIconError] = useState(false);
 
   const isExecuting = executionState === 'running';
 
@@ -263,12 +264,16 @@ export default function Toolbar({ onScriptEditorOpen, onWorkspaceOpen, onExportC
           : "Upstream execution - Click to switch to singe node execution."}
         style={{ minWidth: `${ICON_SIZE + 10}px`, minHeight: `${ICON_SIZE + 10}px` }}
       >
-        <img 
-          src="/api/icons/switch"
-          alt="Execution Mode"
-          className="w-[18px] h-[18px] object-contain"
-          style={{ filter: 'brightness(0) invert(1)' }}
-        />
+        {!execModeIconError ? (
+          <img
+            src="/api/icons/action_exec_mode"
+            alt="Execution Mode"
+            className="w-[18px] h-[18px] object-contain"
+            onError={() => setExecModeIconError(true)}
+          />
+        ) : (
+          <span className="text-xs text-gray-900">?</span>
+        )}
       </button>
 
       {/* Execute */}
