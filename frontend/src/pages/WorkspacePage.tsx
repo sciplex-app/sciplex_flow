@@ -316,6 +316,8 @@ export default function WorkspacePage() {
     } else if (activeTab === 'files') {
       // Use selected folder for uploads
       folder = uploadFolder;
+    } else if (activeTab === 'projects') {
+      endpoint = '/api/projects/upload';
     }
     
     for (let i = 0; i < uploadFiles.length; i++) {
@@ -341,6 +343,8 @@ export default function WorkspacePage() {
           window.dispatchEvent(new CustomEvent('refresh-libraries'));
         } else if (activeTab === 'icons') {
           fetchIcons();
+        } else if (activeTab === 'projects') {
+          fetchProjects();
         }
       } else {
         const error = await response.json();
@@ -1247,7 +1251,15 @@ export default function WorkspacePage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept={activeTab === 'files' ? '.csv,.xlsx,.xls,.json,.txt,.parquet' : activeTab === 'icons' ? '.png,.svg,.jpg,.jpeg' : '.py'}
+              accept={
+                activeTab === 'files'
+                  ? undefined
+                  : activeTab === 'icons'
+                    ? '.png,.svg,.jpg,.jpeg'
+                    : activeTab === 'projects'
+                      ? '.json'
+                      : '.py'
+              }
               onChange={(e) => handleFileUpload(e.target.files)}
               className="hidden"
             />

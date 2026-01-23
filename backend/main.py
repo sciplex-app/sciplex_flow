@@ -2211,9 +2211,6 @@ async def upload_workspace_files(files: List[UploadFile] = File(...), folder: st
     files_dir = get_workspace_files_dir()
     uploaded = []
 
-    # Allowed data file extensions
-    allowed_extensions = {".csv", ".xlsx", ".xls", ".json", ".txt", ".parquet", ".tsv"}
-
     # Determine target directory
     if folder:
         target_dir = files_dir / folder
@@ -2225,13 +2222,6 @@ async def upload_workspace_files(files: List[UploadFile] = File(...), folder: st
         filename = file.filename or ""
         if not filename:
             raise HTTPException(status_code=400, detail="Missing filename")
-        # Validate extension
-        ext = Path(filename).suffix.lower()
-        if ext not in allowed_extensions:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File type '{ext}' not allowed. Allowed: {', '.join(allowed_extensions)}"
-            )
 
         # Save file
         file_path = target_dir / filename
@@ -2244,6 +2234,45 @@ async def upload_workspace_files(files: List[UploadFile] = File(...), folder: st
 
     return {
         "message": f"Uploaded {len(uploaded)} file(s)",
+        "files": uploaded
+    }
+
+
+@app.post("/api/projects/upload")
+async def upload_projects(files: List[UploadFile] = File(...), folder: str = Query("", description="Folder name to upload to (empty for root)")):
+    """Upload project files (.json) to the projects workspace folder."""
+    projects_dir = get_workspace_projects_dir()
+    uploaded = []
+
+    # Determine target directory
+    if folder:
+        target_dir = projects_dir / folder
+        target_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        target_dir = projects_dir
+
+    for file in files:
+        filename = file.filename or ""
+        if not filename:
+            raise HTTPException(status_code=400, detail="Missing filename")
+
+        # Only allow JSON project files
+        ext = Path(filename).suffix.lower()
+        if ext != ".json":
+            raise HTTPException(
+                status_code=400,
+                detail="Only project files (.json) are allowed"
+            )
+
+        file_path = target_dir / filename
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        uploaded.append(filename)
+
+    return {
+        "message": f"Uploaded {len(uploaded)} project file(s)",
         "files": uploaded
     }
 
