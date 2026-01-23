@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sciplex-flow"
-version = "0.1.5"
+version = "0.1.6"
 description = "Local web app for Sciplex visual programming - node-based data science workflows"
 readme = "README.md"
 requires-python = ">=3.11"
